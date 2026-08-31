@@ -13,7 +13,8 @@ ese mismo problema desde cuatro ángulos: **pedir menos** (tarjetas, sección 1)
 distinto** (lenguaje natural, sección 2), **pedir después** (onboarding, sección 4) y
 **pedir desde cualquier lado** (entrada global, sección 5). La sección 3 (identidad) es
 la decisión que las ordena a todas, y la 6 (explicabilidad) es lo que sostiene la
-confianza cuando la carga se vuelve automática.
+confianza cuando la carga se vuelve automática. La 7 extiende la 2 a otros tipos de
+entrada (foto del ticket, PDF del resumen).
 
 ---
 
@@ -278,6 +279,50 @@ necesario**: si algo se completó solo, el usuario necesita ver por qué.
 
 ---
 
+## 7. La misma pipeline con otras entradas: foto y PDF
+
+Extensión de la sección 2, no una feature aparte. El pipeline
+`entrada → [modelo] → JSON → Zod → confirmar` **no depende de que la entrada sea texto
+tipeado**: los modelos reciben imágenes y documentos igual que texto. Cambia el tipo de
+entrada; el resto de la cadena queda idéntica (mismos schemas, misma validación, misma
+confirmación, mismas Server Actions).
+
+| Entrada | Ejemplo | Salida |
+|---|---|---|
+| Texto | *"compré una heladera en 12 cuotas"* | 1 compra pre-completada |
+| **Foto** | foto del ticket del super | 1 compra pre-completada |
+| **PDF** | resumen de la tarjeta del mes | **N** compras pre-completadas |
+
+Las dos primeras son la misma feature con otro botón. La tercera es la interesante.
+
+### Por qué esto abarata el ítem #3 del backlog
+
+`BACKLOG.md` #3 es **"Import de resumen (CSV/PDF)"**. Escrito como parser tradicional es
+un trabajo feo y frágil: cada banco tiene su formato y cuando rediseñan el PDF se rompe.
+Con extracción por modelo, ese ítem pasa a ser **"tirale el PDF"**, reusando exactamente
+la pipeline que ya se construyó para el texto.
+
+Es decir: la feature de IA no solo resuelve la carga manual — **abarata una feature del
+backlog que hoy parece cara**. Ese es el argumento más fuerte para construir la pipeline
+bien desde el principio (schemas como contrato, extracción separada de la confirmación),
+en vez de atarla al caso "una compra por vez".
+
+### Las dos advertencias
+
+- **N compras ⇒ otra UI.** Un resumen trae muchos movimientos de golpe: la confirmación
+  deja de ser un formulario pre-completado y pasa a ser una **lista revisable** (aceptar
+  / editar / descartar por fila, y detectar duplicados contra lo ya cargado). Es bastante
+  más trabajo de UI del que sugiere "tirale el PDF".
+- **Costo por request.** Un PDF entero pesa muchísimo más que una frase. Acá el freno por
+  IP + global de `demo.ts` no alcanza como único control: conviene además un límite de
+  tamaño/páginas y, si hace falta, dejar el import fuera del usuario demo público.
+
+### Orden
+
+Va **después** de que el texto funcione end-to-end. Si la pipeline está bien separada,
+sumar foto es chico; sumar PDF es la lista revisable, que es casi una pantalla nueva.
+
+---
 ## Para analizar más adelante
 
 ### Simulador y alta de compra: ¿el mismo flujo?
@@ -323,6 +368,8 @@ Después, en este orden:
 4. **Hacerla global** (sección 5) — no tiene sentido antes de que el punto común exista.
 5. **Explicabilidad** (sección 6). Se puede adelantar en cualquier momento; se vuelve
    obligatoria una vez que la IA pre-completa campos.
+6. **Otras entradas: foto y PDF** (sección 7), una vez que el texto funcione end-to-end.
+   Es la extensión que además destraba el ítem #3 del backlog.
 
 Al final del recorrido, retomar el análisis diferido del simulador.
 
