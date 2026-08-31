@@ -210,6 +210,10 @@ concreto queda pendiente. Criterios a respetar cuando se elija:
 - Que funcione en el mercado argentino sin sonar a marca extranjera genérica.
 - Que sobreviva al portfolio: es el nombre que va a estar en el CV y en el dominio.
 
+El brief completo para resolverlo (contexto, candidatos ya evaluados y qué investigar:
+colisiones, marcas en INPI, dominios) está en **`docs/NAMING-BRIEF.md`**, listo para
+pasarle a un asistente con búsqueda web.
+
 Impacto técnico del renombre (acotado, pero hay que listarlo): dominio actual
 `cuotapp.gfirm.dev` y su configuración (`docs/SETUP-DOMINIO.md`), remitente y plantillas
 de mails (`docs/SETUP-EMAILS.md`, `src/server/email/`), `BETTER_AUTH_URL` /
