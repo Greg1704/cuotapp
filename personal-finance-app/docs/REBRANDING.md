@@ -8,9 +8,12 @@ funcionando end-to-end, se ven flojos.
 > que existe. Esto es **cambiar cómo funciona lo que ya existe**. Por eso vive aparte.
 
 **Hilo conductor: la fricción de carga.** La app calcula bien, proyecta bien y testea
-bien — pero pide demasiado para que la primera compra entre. Las dos ideas de abajo
-atacan el mismo problema desde dos ángulos: **pedir menos** (tarjetas) y **pedir
-distinto** (lenguaje natural).
+bien — pero pide demasiado para que la primera compra entre. Casi todo lo de abajo ataca
+ese mismo problema desde cuatro ángulos: **pedir menos** (tarjetas, sección 1), **pedir
+distinto** (lenguaje natural, sección 2), **pedir después** (onboarding, sección 4) y
+**pedir desde cualquier lado** (entrada global, sección 5). La sección 3 (identidad) es
+la decisión que las ordena a todas, y la 6 (explicabilidad) es lo que sostiene la
+confianza cuando la carga se vuelve automática.
 
 ---
 
@@ -175,13 +178,159 @@ datos actual: compra y suscripción ya son entidades hermanas.
 
 ---
 
+## 3. Identidad: el nombre y el alcance ya no coinciden
+
+**Este es el rebranding literal, y condiciona a todos los demás puntos.**
+
+CuotApp nació para compras en cuotas. Hoy el modelo de datos incluye débito, efectivo,
+transferencias, suscripciones y ahorro con ancla temporal; el dashboard está armado
+explícitamente **"por ejes"** (crédito y ahorro). La sección se llama "Compras" pero
+guarda gastos que no son compras a crédito. **La app se volvió más grande que su nombre
+y todavía se presenta con el nombre viejo.**
+
+Hay una decisión de posicionamiento que ordena todo lo demás:
+
+- **App de cuotas con extras** ⇒ el eje ahorro es soporte y la navegación actual tiene
+  sentido como está.
+- **App de flujo de caja personal cuyo diferencial es que entiende cuotas como nadie**
+  ⇒ cambia la jerarquía entera (navegación, dashboard, onboarding).
+
+Dato no menor: el punto común de entrada por lenguaje natural (sección 2) se enuncia
+como *"contame qué gastaste"*, no *"qué compraste en cuotas"* — **ya asume la segunda
+lectura**. Conviene tomar la decisión de forma consciente antes de rediseñar pantallas,
+porque define si los puntos 4 y 5 son mejoras o contradicciones.
+
+### Nombre
+
+Decisión tomada: **el nombre nuevo debe ser más formal** que "CuotApp". El candidato
+concreto queda pendiente. Criterios a respetar cuando se elija:
+
+- Que no encierre al producto en "cuotas" si la lectura elegida es la de flujo de caja.
+- Que funcione en el mercado argentino sin sonar a marca extranjera genérica.
+- Que sobreviva al portfolio: es el nombre que va a estar en el CV y en el dominio.
+
+Impacto técnico del renombre (acotado, pero hay que listarlo): dominio actual
+`cuotapp.gfirm.dev` y su configuración (`docs/SETUP-DOMINIO.md`), remitente y plantillas
+de mails (`docs/SETUP-EMAILS.md`, `src/server/email/`), `BETTER_AUTH_URL` /
+`NEXT_PUBLIC_APP_URL` en Vercel, metadatos del layout raíz, y los textos de la UI. El
+nombre del paquete (`personal-finance-app`) y el del repo son cosméticos y pueden quedar.
+
+---
+
+## 4. La barrera de la primera tarjeta es artificial
+
+**El motor es más flexible que el onboarding que lo envuelve.**
+
+`purchaseSchema` **ya permite** registrar efectivo y transferencia sin ninguna tarjeta
+(`cardId` solo es requerido para `CREDIT`/`DEBIT`). Pero `pendingStep()` en
+`src/server/lib/onboarding.ts` impone el orden canónico **ingreso → tarjeta → compra**, y
+`shouldShowChecklist()` reemplaza el dashboard por el checklist mientras haya menos de 2
+pasos hechos.
+
+Resultado: el producto **exige cargar una tarjeta** —el formulario de 11 campos de la
+sección 1— antes de dejar registrar un gasto que **no necesita tarjeta**.
+
+**Rework:** invertir el orden canónico a **ingreso → primer gasto → tarjeta** (la tarjeta
+cuando el usuario quiera cuotas, que es cuando recién ahí el ciclo importa). Alguien
+puede empezar a usar la app en 20 segundos y sumar la tarjeta cuando le sirva.
+
+- **Esfuerzo:** bajo. `onboarding.ts` es una función pura ya testeada: cambia el orden y
+  se ajustan sus tests, más los textos del checklist y del banner.
+- **No depende de la IA.** Se puede hacer ya.
+
+---
+
+## 5. Nada en la navegación es una acción
+
+Los 7 items del sidebar (`src/components/layout/app-sidebar.tsx`) son todos **lugares**:
+Dashboard, Tarjetas, Compras, Suscripciones, Calendario, Simulador, Configuración.
+
+Para registrar una compra hay que navegar a `/compras`: `PurchaseFormDialog` se monta
+**únicamente** ahí. Para una suscripción, a `/suscripciones`.
+
+Si el punto común de la sección 2 existe, **tiene que ser global**: un input siempre
+presente en el layout del dashboard, un `⌘K`, o un botón flotante en mobile. Un punto
+común escondido dentro de una sección no es un punto común — es un cuarto formulario.
+
+Es lo que hace que la idea rinda de verdad: la app deja de ser *"un lugar donde
+consulto"* y pasa a *"un lugar donde anoto"*. El rebranding se percibe en el primer
+segundo de uso.
+
+---
+
+## 6. Explicabilidad: volver visible la precisión que ya existe
+
+La app deriva la TEM por bisección, reparte los centavos sobrantes para que la suma de
+cuotas cierre exacta, y corre al lunes los vencimientos que caen fin de semana. **Nada de
+eso se explica en la UI.**
+
+Un "¿por qué esta fecha?" / "¿por qué este monto de cuota?" en el detalle de compra
+cuesta poco y hace dos cosas:
+
+- **Para el usuario:** genera confianza en los números.
+- **Para el portfolio:** muestra el dominio que hoy está enterrado en `installments.ts` y
+  `dates.ts` y no se ve desde afuera.
+
+Con la IA pre-completando campos (sección 2) la explicabilidad **pasa de lindo a
+necesario**: si algo se completó solo, el usuario necesita ver por qué.
+
+- **No depende de la IA** para empezar, pero se vuelve obligatoria cuando la IA exista.
+
+---
+
+## Para analizar más adelante
+
+### Simulador y alta de compra: ¿el mismo flujo?
+
+> **Estado: NO decidido. Analizar recién DESPUÉS de que el chatbot esté hecho.** El
+> simulador se mantiene como está: es una feature que funciona y que se quiere conservar.
+
+Observación que dispara el análisis: `simulatorSchema` es hoy un **subconjunto exacto**
+de `purchaseSchema`.
+
+| Campos | Simulador | Compra |
+|---|---|---|
+| `cardId`, `currency`, `totalAmount`, `totalInstallments`, `purchaseDate`, `financedTotal`, `limitRate` | sí | sí |
+| `paymentMethod`, `description`, `merchant`, `categoryId`, `notes` | — | sí |
+
+La diferencia no es de datos, es de **tiempo verbal**: *"si compro esto en 12 cuotas"* vs.
+*"compré esto en 12 cuotas"*.
+
+La hipótesis a evaluar después del chatbot es si conviene un flujo único
+(escribir → ver el impacto proyectado → **Guardar** o **Descartar**), que convertiría al
+simulador en el paso de confirmación de toda compra a crédito — "la app te muestra el
+daño antes, siempre", no después.
+
+**Por qué se difiere:** el chatbot va a cambiar cómo entra la información a los dos
+formularios. Recién con esa pieza construida se puede ver si la unificación simplifica o
+si rompe una feature que hoy tiene valor propio.
+
+---
 ## Orden sugerido
 
-1. **Tarjetas primero.** No por ser más fácil, sino porque la entrada por lenguaje
-   natural necesita resolver "la del Galicia" contra las tarjetas del usuario: cuanto más
-   liviano y temprano sea el alta de tarjetas, mejor funciona la IA encima.
-2. **Entrada por lenguaje natural después**, empezando por compras (el schema más rico) y
-   sumando suscripciones, que es el mismo mecanismo con otro schema de salida.
+**Primero, sin escribir código:** tomar la decisión de identidad (sección 3). Define si
+los puntos 4 y 5 son mejoras o contradicciones, y de qué lado cae el nombre nuevo.
+
+Después, en este orden:
+
+1. **Invertir el onboarding** (sección 4). Mejor relación valor/esfuerzo de la lista, no
+   depende de nada más y ataca la barrera del primer minuto.
+2. **Simplificar el alta de tarjetas** (sección 1). Va antes que la IA porque la entrada
+   por lenguaje natural necesita resolver "la del Galicia" contra las tarjetas del
+   usuario: cuanto más liviano y temprano sea el alta, mejor funciona la IA encima.
+3. **Entrada por lenguaje natural** (sección 2), empezando por compras (el schema más
+   rico) y sumando suscripciones, que es el mismo mecanismo con otro schema de salida.
+4. **Hacerla global** (sección 5) — no tiene sentido antes de que el punto común exista.
+5. **Explicabilidad** (sección 6). Se puede adelantar en cualquier momento; se vuelve
+   obligatoria una vez que la IA pre-completa campos.
+
+Al final del recorrido, retomar el análisis diferido del simulador.
+
+### Qué NO depende de la IA
+
+Las secciones **4** (onboarding), **6** (explicabilidad) y buena parte de la **1**
+(tarjetas) se pueden hacer ya, sin API key ni proveedor definido. Es el camino para
+avanzar mientras las decisiones de la sección 2 siguen abiertas.
 
 ---
 
