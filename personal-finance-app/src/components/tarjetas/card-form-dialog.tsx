@@ -75,9 +75,10 @@ export function CardFormDialog({
 }: Props) {
   const [open, setOpen] = useState(false);
   const isEdit = Boolean(card);
-  // Los datos identificatorios (dueño, marca, últimos 4, MM/AA) arrancan colapsados en el
-  // alta y abiertos en edición, donde esconder datos ya cargados sería peor.
-  const [showDetails, setShowDetails] = useState(isEdit);
+  // Los datos identificatorios (dueño, marca, últimos 4, MM/AA) arrancan SIEMPRE
+  // colapsados, también en edición: el modal abre mostrando lo esencial y quien quiera
+  // tocarlos los despliega.
+  const [showDetails, setShowDetails] = useState(false);
 
   // Si createCard detecta un duplicado, guardamos la tarjeta existente y los
   // valores ingresados para ofrecer reactivar / crear igual.
@@ -231,7 +232,7 @@ export function CardFormDialog({
         if (o) {
           form.reset(defaultValues);
           setBankChoice(initialBankChoice);
-          setShowDetails(isEdit);
+          setShowDetails(false);
         }
         setDuplicate(null);
         setPendingValues(null);
@@ -482,8 +483,7 @@ export function CardFormDialog({
               {/* Datos identificatorios: NO los usa el motor de cuotas (que solo
                   necesita el ciclo de cierre/vencimiento), solo sirven para reconocer el
                   plástico en la UI. Van detrás de un toggle para que el alta no obligue a
-                  tener la tarjeta en la mano: se pueden completar después, editando. En
-                  modo edición arrancan abiertos, para no esconder datos ya cargados. */}
+                  tener la tarjeta en la mano: se pueden completar después, editando. */}
               <div className="grid gap-2">
                 <Button
                   type="button"

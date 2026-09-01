@@ -52,7 +52,7 @@ describe("CardFormDialog — datos identificatorios plegados", () => {
     expect(screen.getByText("Dueño")).toBeInTheDocument();
   });
 
-  it("en edición arrancan desplegados: esconder datos ya cargados sería peor", async () => {
+  it("en edición también arrancan plegados, y el toggle los muestra ya cargados", async () => {
     render(
       <CardFormDialog
         card={{
@@ -75,6 +75,12 @@ describe("CardFormDialog — datos identificatorios plegados", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Editar" }));
 
+    // Plegados al abrir, igual que en el alta.
+    expect(await screen.findByText("Nombre")).toBeInTheDocument();
+    expect(screen.queryByText("Últimos 4 dígitos")).not.toBeInTheDocument();
+
+    // Al desplegarlos aparecen con los valores de la tarjeta.
+    fireEvent.click(screen.getByRole("button", { name: TOGGLE }));
     expect(await screen.findByText("Últimos 4 dígitos")).toBeInTheDocument();
     expect(screen.getByDisplayValue("1234")).toBeInTheDocument();
   });
