@@ -88,7 +88,11 @@ model Card {
   owner          String?   // dueño de la tarjeta (para tarjetas ajenas que se deben pagar)
   bank           String    // banco emisor ("Galicia", "Santander"… o nombre libre)
   brand          String?
-  last4          String    // últimos 4 dígitos (obligatorio)
+  // Últimos 4 dígitos. OPCIONAL: no lo usa ningún cálculo, solo desempata dos tarjetas
+  // del mismo banco en la UI (y ese desempate ya lo cubre `name`, que sí es obligatorio).
+  // Pedirlo en el alta obligaba a tener el plástico a mano para registrar la primera
+  // compra. Nunca se guarda el PAN completo (PCI-DSS, ver .claude/rules/seguridad.md).
+  last4          String?
   // El ciclo de facturación y el vencimiento solo aplican a tarjetas de CRÉDITO:
   // el débito gasta contra el saldo al instante (sin cierre/vencimiento). Nullables.
   expirationDate DateTime? @db.Date // vencimiento de la tarjeta (fin del mes MM/AA)

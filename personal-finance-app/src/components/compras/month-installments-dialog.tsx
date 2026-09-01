@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import type { InstallmentStatus } from "@/generated/prisma/client";
+import { last4Suffix } from "@/lib/card-view";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -26,7 +27,7 @@ export type MonthInstallmentView = {
   id: string;
   description: string;
   cardName: string;
-  cardLast4: string;
+  cardLast4: string | null;
   installmentNumber: number;
   totalInstallments: number;
   dueDate: string;
@@ -92,7 +93,7 @@ function MonthInstallmentRow({
       <div className="grid min-w-0">
         <span className="truncate font-medium">{inst.description}</span>
         <span className="text-muted-foreground text-xs">
-          {inst.cardName} ···· {inst.cardLast4} · {inst.installmentNumber}/
+          {inst.cardName}{last4Suffix(inst.cardLast4)} · {inst.installmentNumber}/
           {inst.totalInstallments} · vence {inst.dueDate}
         </span>
       </div>

@@ -82,11 +82,11 @@ test.describe("compra en cuotas (RNF-6.3, parte 2)", () => {
     await page.getByRole("button", { name: "+ Nueva tarjeta" }).first().click();
     const cardDialog = page.getByRole("dialog");
     await expect(cardDialog).toBeVisible();
+    // Alta MÍNIMA: nombre + banco. Los últimos 4 y el MM/AA son opcionales y viven en la
+    // sección plegada "Datos de la tarjeta (opcional)": no hace falta tener el plástico a
+    // mano para empezar a usar la app. El límite es opt-in (Configuración).
     await cardDialog.getByLabel("Nombre").fill(cardName);
     await selectOption(page, "Banco", "Galicia");
-    await cardDialog.getByLabel("Últimos 4 dígitos").fill("4321");
-    await cardDialog.getByLabel("Vencimiento (MM/AA)").fill("12/30");
-    // El límite de crédito es opt-in (Configuración) y no forma parte del flujo core.
     await cardDialog.getByRole("button", { name: "Crear tarjeta" }).click();
     await expect(cardDialog).toBeHidden();
     await expect(page.getByText(cardName)).toBeVisible();

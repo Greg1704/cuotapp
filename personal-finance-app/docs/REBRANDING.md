@@ -20,6 +20,19 @@ entrada (foto del ticket, PDF del resumen).
 
 ## 1. Simplificar el alta de tarjetas
 
+> **Estado: niveles 1 y 2 IMPLEMENTADOS.** `brand`, `owner`, `last4` y `expiration` salieron
+> del alta: viven detrás del toggle *"Datos de la tarjeta (opcional)"* y ninguno es
+> obligatorio (`last4` pasó a `String?` en la DB, migración `card_optional_last4`). El
+> **nivel 3 queda como está por decisión**: el banco sigue siendo requerido y el límite en
+> su lugar actual. El nivel 4 (defaults por banco para cierre/vencimiento) sigue abierto.
+>
+> Dos trampas que aparecieron al implementarlo, ya resueltas y con test:
+> - El chequeo de duplicados era `banco + last4`, y **Prisma ignora un filtro cuyo valor es
+>   `undefined`**: sin últimos 4 la consulta se reducía a "cualquier tarjeta de este banco"
+>   y marcaba como duplicada la segunda tarjeta del mismo banco.
+> - `listActiveCards` filtraba `OR: [débito, expirationDate >= hoy]`. Una tarjeta de crédito
+>   **sin** MM/AA no matcheaba ninguna rama —ni la de vencidas— y desaparecía de la UI.
+
 ### El problema
 
 El alta de una tarjeta de crédito muestra hoy **11 controles**: tipo, nombre, dueño,

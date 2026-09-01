@@ -97,3 +97,54 @@ describe("cardSchema — límite de crédito", () => {
     expect(result.success).toBe(true);
   });
 });
+
+/**
+ * Nivel 1 y 2 del rebranding (ver REBRANDING.md § 1): los campos que solo identifican el
+ * plástico dejaron de ser obligatorios. Lo único requerido es lo que el motor de cuotas
+ * necesita: tipo, nombre, banco y —en crédito— el ciclo de cierre/vencimiento.
+ */
+describe("cardSchema — campos identificatorios opcionales", () => {
+  const minima = {
+    type: "CREDIT" as const,
+    name: "Tarjeta principal",
+    bank: "Galicia",
+    closingDay: 20,
+    dueDay: 10,
+    currencies: ["ARS"] as const,
+  };
+
+  it("acepta una tarjeta de crédito sin últimos 4, sin MM/AA, sin marca y sin dueño", () => {
+    expect(cardSchema.safeParse(minima).success).toBe(true);
+  });
+
+  it("acepta esos campos como string vacío (lo que manda el form al dejarlos en blanco)", () => {
+    const result = cardSchema.safeParse({
+      ...minima,
+      last4: "",
+      expiration: "",
+      brand: "",
+      owner: "",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("sigue exigiendo el ciclo de facturación en crédito", () => {
+    expect(cardSchema.safeParse({ ...minima, closingDay: undefined }).success).toBe(false);
+    expect(cardSchema.safeParse({ ...minima, dueDay: undefined }).success).toBe(false);
+  });
+
+  it("si se cargan, los últimos 4 tienen que ser exactamente 4 dígitos", () => {
+    expect(cardSchema.safeParse({ ...minima, last4: "12" }).success).toBe(false);
+    expect(cardSchema.safeParse({ ...minima, last4: "12ab" }).success).toBe(false);
+    expect(cardSchema.safeParse({ ...minima, last4: "1234" }).success).toBe(true);
+  });
+
+  it("si se carga, el MM/AA sigue validándose (formato y no vencido)", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 5, 15));
+
+    expect(cardSchema.safeParse({ ...minima, expiration: "13/99" }).success).toBe(false);
+    expect(cardSchema.safeParse({ ...minima, expiration: "01/20" }).success).toBe(false);
+    expect(cardSchema.safeParse({ ...minima, expiration: "08/30" }).success).toBe(true);
+  });
+});

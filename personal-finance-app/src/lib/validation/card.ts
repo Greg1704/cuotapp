@@ -5,10 +5,14 @@ import { parseExpiration, isCardExpired } from "@/server/lib/dates";
 const MMYY = /^(0[1-9]|1[0-2])\/\d{2}$/;
 
 /**
- * Alta/edición de tarjeta. El ciclo de facturación (cierre/vencimiento) y el
- * vencimiento MM/AA solo aplican a tarjetas de CRÉDITO: el débito gasta contra el
- * saldo al instante. Por eso esos campos son opcionales en el tipo y se exigen
- * condicionalmente con `superRefine` según `type`.
+ * Alta/edición de tarjeta. El ciclo de facturación (cierre/vencimiento) solo aplica a
+ * tarjetas de CRÉDITO: el débito gasta contra el saldo al instante. Por eso esos campos
+ * son opcionales en el tipo y se exigen condicionalmente con `superRefine` según `type`.
+ *
+ * Lo ÚNICO obligatorio es lo que el motor de cuotas necesita (tipo, nombre, banco y —en
+ * crédito— cierre y vencimiento del ciclo). Los datos de identificación —últimos 4,
+ * vencimiento MM/AA, marca, dueño— son opcionales: obligarlos en el alta forzaba a tener
+ * el plástico en la mano antes de poder registrar la primera compra.
  */
 export const cardSchema = z
   .object({
@@ -21,11 +25,12 @@ export const cardSchema = z
       .optional(),
     bank: z.string().min(1, "Elegí un banco").max(50),
     brand: z.string().max(50).optional(),
+    // Opcional: vacío o exactamente 4 dígitos. La Server Action normaliza "" a null.
     last4: z
       .string()
-      .length(4, "Deben ser 4 dígitos")
-      .regex(/^\d{4}$/, "Solo dígitos"),
-    // Solo crédito (MM/AA). La conversión a Date se hace en la Server Action.
+      .regex(/^(\d{4})?$/, "Deben ser 4 dígitos")
+      .optional(),
+    // Opcional, solo crédito (MM/AA). La conversión a Date se hace en la Server Action.
     expiration: z.string().optional(),
     closingDay: z.number().int().min(1, "Día inválido").max(31, "Día inválido").optional(),
     dueDay: z.number().int().min(1, "Día inválido").max(31, "Día inválido").optional(),
@@ -43,18 +48,23 @@ export const cardSchema = z
   })
   .superRefine((data, ctx) => {
     if (data.type !== "CREDIT") return; // el débito no tiene ciclo ni vencimiento
-    if (!data.expiration || !MMYY.test(data.expiration)) {
-      ctx.addIssue({
-        path: ["expiration"],
-        code: "custom",
-        message: "Formato MM/AA (ej. 08/27)",
-      });
-    } else if (isCardExpired(parseExpiration(data.expiration))) {
-      ctx.addIssue({
-        path: ["expiration"],
-        code: "custom",
-        message: "La tarjeta ya está vencida",
-      });
+    // El vencimiento MM/AA NO lo usa el motor de cuotas (solo la sección de tarjetas
+    // vencidas y el flujo de renovación), así que puede quedar vacío. Si se carga, tiene
+    // que ser válido y futuro: una fecha ya pasada es un error de tipeo, no un dato útil.
+    if (data.expiration) {
+      if (!MMYY.test(data.expiration)) {
+        ctx.addIssue({
+          path: ["expiration"],
+          code: "custom",
+          message: "Formato MM/AA (ej. 08/27)",
+        });
+      } else if (isCardExpired(parseExpiration(data.expiration))) {
+        ctx.addIssue({
+          path: ["expiration"],
+          code: "custom",
+          message: "La tarjeta ya está vencida",
+        });
+      }
     }
     if (data.closingDay == null) {
       ctx.addIssue({ path: ["closingDay"], code: "custom", message: "Día inválido" });

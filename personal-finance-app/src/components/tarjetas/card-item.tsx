@@ -80,7 +80,10 @@ export function CardItem({
             <p>
               Cierre día {card.closingDay} · Vence día {card.dueDay}
             </p>
-            <p>Vto. tarjeta: {formatExpiration(card.expirationDate)}</p>
+            {/* El MM/AA es opcional: sin fecha cargada no mostramos la línea vacía. */}
+            {card.expirationDate && (
+              <p>Vto. tarjeta: {formatExpiration(card.expirationDate)}</p>
+            )}
           </>
         )}
 

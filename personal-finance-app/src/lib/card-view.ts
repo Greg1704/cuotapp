@@ -13,7 +13,7 @@ export type CardView = {
   owner: string | null;
   bank: string;
   brand: string | null;
-  last4: string;
+  last4: string | null;
   expirationDate: Date | null;
   closingDay: number | null;
   dueDay: number | null;
@@ -39,4 +39,13 @@ export function toCardView(card: Card): CardView {
     isActive: card.isActive,
     creditLimitCents: card.creditLimitCents == null ? null : card.creditLimitCents.toString(),
   };
+}
+
+/**
+ * Sufijo identificatorio por los últimos 4 dígitos: `" ···· 1234"`, o `""` si la tarjeta
+ * no los tiene cargados (son opcionales, ver `cardSchema`). Centraliza el manejo del
+ * `null` para que ninguna etiqueta quede con un "····" colgando sin números detrás.
+ */
+export function last4Suffix(last4: string | null | undefined): string {
+  return last4 ? ` ···· ${last4}` : "";
 }

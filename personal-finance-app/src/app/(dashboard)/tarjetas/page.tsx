@@ -1,6 +1,7 @@
 import { CreditCard } from "lucide-react";
 
 import { requireUser } from "@/server/auth/session";
+import { last4Suffix } from "@/lib/card-view";
 import { prisma } from "@/server/db";
 import {
   listActiveCards,
@@ -121,7 +122,7 @@ export default async function TarjetasPage() {
                     </span>
                     <span className="font-medium">{card.name}</span>
                     <span className="text-muted-foreground">
-                      {card.bank} · •••• {card.last4} · {formatExpiration(card.expirationDate)}
+                      {card.bank}{last4Suffix(card.last4)} · {formatExpiration(card.expirationDate)}
                     </span>
                     <div className="ml-auto">
                       <RenewCardDialog

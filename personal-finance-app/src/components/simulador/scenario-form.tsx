@@ -8,6 +8,7 @@ import type { PurchasePlan } from "@/server/lib/purchase-plan";
 import { formatMoney } from "@/server/lib/money";
 import { formatDate, startOfToday } from "@/server/lib/dates";
 import { cn } from "@/lib/utils";
+import { last4Suffix } from "@/lib/card-view";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -109,7 +110,7 @@ export function ScenarioForm({
                     <SelectContent>
                       {cards.map((c) => (
                         <SelectItem key={c.id} value={c.id}>
-                          {c.name} · {c.bank} ···· {c.last4} ({c.currencies.join("/")})
+                          {c.name} · {c.bank}{last4Suffix(c.last4)} ({c.currencies.join("/")})
                         </SelectItem>
                       ))}
                     </SelectContent>

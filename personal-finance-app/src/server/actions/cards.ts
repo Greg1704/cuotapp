@@ -12,8 +12,12 @@ import { getSubscriptionUtilizationByCard } from "@/server/queries/subscriptions
 import { toCardView, type CardView } from "@/lib/card-view";
 
 /**
- * Tarjetas vigentes: activas y sin vencer. El DÉBITO no tiene vencimiento, así que
- * siempre cuenta como vigente; el crédito, solo si su `expirationDate` no pasó.
+ * Tarjetas vigentes: activas y sin vencer. Tres casos cuentan como vigentes:
+ * - DÉBITO: no tiene vencimiento.
+ * - Crédito SIN `expirationDate`: el MM/AA es opcional, y una tarjeta sin fecha cargada
+ *   no puede saberse vencida. Sin esta rama desaparecería de la lista (no matchearía
+ *   ninguna de las otras dos) y tampoco aparecería en las vencidas: se esfumaría.
+ * - Crédito con fecha que todavía no pasó.
  */
 export async function listActiveCards() {
   const user = await requireUser();
@@ -21,7 +25,11 @@ export async function listActiveCards() {
     where: {
       userId: user.id,
       isActive: true,
-      OR: [{ type: "DEBIT" }, { expirationDate: { gte: startOfToday() } }],
+      OR: [
+        { type: "DEBIT" },
+        { expirationDate: null },
+        { expirationDate: { gte: startOfToday() } },
+      ],
     },
     orderBy: { createdAt: "desc" },
   });
@@ -60,10 +68,13 @@ export type CreateCardResult =
  * convierte el MM/AA a Date (fin de mes), el límite a centavos, y guarda cierre/vencimiento.
  */
 function toCardData(parsed: ReturnType<typeof cardSchema.parse>) {
-  const { expiration, closingDay, dueDay, creditLimit, ...rest } = parsed;
+  const { expiration, closingDay, dueDay, creditLimit, last4, ...rest } = parsed;
   const isCredit = parsed.type === "CREDIT";
   return {
     ...rest,
+    // El form manda "" cuando el campo queda vacío; en la DB eso es `null`, no un string
+    // vacío (que ensuciaría el chequeo de duplicados y las comparaciones).
+    last4: last4 || null,
     closingDay: isCredit ? closingDay : null,
     dueDay: isCredit ? dueDay : null,
     expirationDate: isCredit && expiration ? parseExpiration(expiration) : null,
@@ -75,8 +86,12 @@ export async function createCard(input: unknown, force = false): Promise<CreateC
   const user = await requireUser();
   const parsed = cardSchema.parse(input);
 
-  if (!force) {
-    // Duplicado = mismo banco + últimos 4 (entre activas, vencidas y desactivadas).
+  // Duplicado = mismo banco + últimos 4 (entre activas, vencidas y desactivadas). Solo
+  // se chequea si se cargaron los últimos 4: son el único dato que identifica el plástico.
+  // Sin ellos no hay señal de duplicado —dos tarjetas del mismo banco son perfectamente
+  // normales— y además Prisma IGNORA un filtro cuyo valor es `undefined`, así que la query
+  // pasaría a ser "cualquier tarjeta de este banco" y marcaría falsos positivos.
+  if (!force && parsed.last4) {
     const existing = await prisma.card.findFirst({
       where: { userId: user.id, bank: parsed.bank, last4: parsed.last4 },
     });

@@ -8,6 +8,7 @@ import { CalendarIcon } from "lucide-react";
 
 import type { Card, Category } from "@/generated/prisma/client";
 import { cn } from "@/lib/utils";
+import { last4Suffix } from "@/lib/card-view";
 import { purchaseSchema, type PurchaseFormValues } from "@/lib/validation/purchase";
 import { createPurchase } from "@/server/actions/purchases";
 import { buildPurchasePlan } from "@/server/lib/purchase-plan";
@@ -339,7 +340,7 @@ export function PurchaseFormDialog({
                         <SelectContent>
                           {methodCards.map((c) => (
                             <SelectItem key={c.id} value={c.id}>
-                              {c.name} · {c.bank} ···· {c.last4} ({c.currencies.join("/")})
+                              {c.name} · {c.bank}{last4Suffix(c.last4)} ({c.currencies.join("/")})
                             </SelectItem>
                           ))}
                         </SelectContent>

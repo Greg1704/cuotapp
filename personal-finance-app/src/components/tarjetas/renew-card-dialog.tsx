@@ -6,6 +6,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
 
 import { renewCardSchema, type RenewCardValues } from "@/lib/validation/card";
+import { last4Suffix } from "@/lib/card-view";
 import { renewCard } from "@/server/actions/cards";
 import { formatExpiration } from "@/server/lib/dates";
 import { Button } from "@/components/ui/button";
@@ -33,7 +34,7 @@ export type RenewCardItem = {
   id: string;
   name: string;
   bank: string;
-  last4: string;
+  last4: string | null;
   expirationDate: Date;
 };
 
@@ -100,7 +101,7 @@ export function RenewCardDialog({
           <span className="font-medium">{card.name}</span>
           <span className="text-muted-foreground">
             {" "}
-            · {card.bank} · •••• {card.last4} · vencía {formatExpiration(card.expirationDate)}
+            · {card.bank}{last4Suffix(card.last4)} · vencía {formatExpiration(card.expirationDate)}
           </span>
         </div>
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { ChevronDown } from "lucide-react";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
@@ -74,6 +75,9 @@ export function CardFormDialog({
 }: Props) {
   const [open, setOpen] = useState(false);
   const isEdit = Boolean(card);
+  // Los datos identificatorios (dueño, marca, últimos 4, MM/AA) arrancan colapsados en el
+  // alta y abiertos en edición, donde esconder datos ya cargados sería peor.
+  const [showDetails, setShowDetails] = useState(isEdit);
 
   // Si createCard detecta un duplicado, guardamos la tarjeta existente y los
   // valores ingresados para ofrecer reactivar / crear igual.
@@ -127,6 +131,7 @@ export function CardFormDialog({
       ...values,
       owner: values.owner || undefined,
       brand: values.brand || undefined,
+      last4: values.last4 || undefined,
     };
 
     try {
@@ -226,6 +231,7 @@ export function CardFormDialog({
         if (o) {
           form.reset(defaultValues);
           setBankChoice(initialBankChoice);
+          setShowDetails(isEdit);
         }
         setDuplicate(null);
         setPendingValues(null);
@@ -295,25 +301,6 @@ export function CardFormDialog({
                 )}
               />
 
-              <FormField
-                control={form.control}
-                name="owner"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Dueño</FormLabel>
-                    <FormControl>
-                      <Input
-                        placeholder="Juan Lopez"
-                        {...field}
-                        onChange={(e) =>
-                          field.onChange(e.target.value.replace(/[^\p{L}\s]/gu, ""))
-                        }
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
 
               {/* Banco: select de conocidos + "Otro" con input libre.
                   El recuadro arranca gris y toma el color del banco al elegirlo. */}
@@ -359,79 +346,7 @@ export function CardFormDialog({
                 )}
               />
 
-              <div className="grid grid-cols-2 items-start gap-4">
-                <FormField
-                  control={form.control}
-                  name="brand"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Marca</FormLabel>
-                      <Select
-                        onValueChange={field.onChange}
-                        value={field.value || undefined}
-                      >
-                        <FormControl>
-                          <SelectTrigger className="w-full">
-                            <SelectValue placeholder="Elegí…" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {BRANDS.map((b) => (
-                            <SelectItem key={b} value={b}>
-                              {b}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
 
-                <FormField
-                  control={form.control}
-                  name="last4"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Últimos 4 dígitos</FormLabel>
-                      <FormControl>
-                        <Input
-                          inputMode="numeric"
-                          maxLength={4}
-                          placeholder="1234"
-                          {...field}
-                          onChange={(e) =>
-                            field.onChange(e.target.value.replace(/\D/g, "").slice(0, 4))
-                          }
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-
-              {isCredit && (
-                <FormField
-                  control={form.control}
-                  name="expiration"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Vencimiento (MM/AA)</FormLabel>
-                      <FormControl>
-                        <Input
-                          inputMode="numeric"
-                          maxLength={5}
-                          placeholder="08/27"
-                          value={field.value ?? ""}
-                          onChange={(e) => field.onChange(maskExpiration(e.target.value))}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              )}
 
               {isCredit && (
               <div className="grid grid-cols-2 items-start gap-4">
@@ -563,6 +478,125 @@ export function CardFormDialog({
                   );
                 }}
               />
+
+              {/* Datos identificatorios: NO los usa el motor de cuotas (que solo
+                  necesita el ciclo de cierre/vencimiento), solo sirven para reconocer el
+                  plástico en la UI. Van detrás de un toggle para que el alta no obligue a
+                  tener la tarjeta en la mano: se pueden completar después, editando. En
+                  modo edición arrancan abiertos, para no esconder datos ya cargados. */}
+              <div className="grid gap-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="text-muted-foreground w-fit justify-start px-0 hover:bg-transparent"
+                  onClick={() => setShowDetails((v) => !v)}
+                  aria-expanded={showDetails}
+                >
+                  <ChevronDown
+                    className={cn("size-4 transition-transform", showDetails && "rotate-180")}
+                  />
+                  Datos de la tarjeta (opcional)
+                </Button>
+
+                {showDetails && (
+                  <div className="grid gap-4">
+                <FormField
+                  control={form.control}
+                  name="owner"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Dueño</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="Juan Lopez"
+                          {...field}
+                          onChange={(e) =>
+                            field.onChange(e.target.value.replace(/[^\p{L}\s]/gu, ""))
+                          }
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <div className="grid grid-cols-2 items-start gap-4">
+                  <FormField
+                    control={form.control}
+                    name="brand"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Marca</FormLabel>
+                        <Select
+                          onValueChange={field.onChange}
+                          value={field.value || undefined}
+                        >
+                          <FormControl>
+                            <SelectTrigger className="w-full">
+                              <SelectValue placeholder="Elegí…" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {BRANDS.map((b) => (
+                              <SelectItem key={b} value={b}>
+                                {b}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="last4"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Últimos 4 dígitos</FormLabel>
+                        <FormControl>
+                          <Input
+                            inputMode="numeric"
+                            maxLength={4}
+                            placeholder="1234"
+                            {...field}
+                            onChange={(e) =>
+                              field.onChange(e.target.value.replace(/\D/g, "").slice(0, 4))
+                            }
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                {isCredit && (
+                  <FormField
+                    control={form.control}
+                    name="expiration"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Vencimiento (MM/AA)</FormLabel>
+                        <FormControl>
+                          <Input
+                            inputMode="numeric"
+                            maxLength={5}
+                            placeholder="08/27"
+                            value={field.value ?? ""}
+                            onChange={(e) => field.onChange(maskExpiration(e.target.value))}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
+                  </div>
+                )}
+              </div>
 
               <DialogFooter>
                 <Button type="submit" disabled={form.formState.isSubmitting}>
