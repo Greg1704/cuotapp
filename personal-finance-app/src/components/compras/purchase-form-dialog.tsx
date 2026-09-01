@@ -95,8 +95,18 @@ export function PurchaseFormDialog({
   const creditCards = cards.filter((c) => c.type === "CREDIT");
   const debitCards = cards.filter((c) => c.type === "DEBIT");
 
+  /**
+   * Medio de pago inicial: crédito si hay tarjeta de crédito, débito si solo hay de
+   * débito, y efectivo si no hay ninguna. El onboarding ya no exige cargar una tarjeta
+   * antes del primer gasto (ver `pendingStep` en server/lib/onboarding), así que el
+   * form no puede abrir en un medio de pago que ese usuario no está en condiciones de
+   * completar: abriría directo en el cartel de "no tenés tarjetas".
+   */
+  const initialPaymentMethod: PurchaseFormValues["paymentMethod"] =
+    creditCards.length > 0 ? "CREDIT" : debitCards.length > 0 ? "DEBIT" : "CASH";
+
   const defaultValues: PurchaseFormValues = {
-    paymentMethod: "CREDIT",
+    paymentMethod: initialPaymentMethod,
     cardId: undefined,
     categoryId: undefined,
     description: "",

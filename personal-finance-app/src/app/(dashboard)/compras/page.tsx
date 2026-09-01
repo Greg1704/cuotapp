@@ -122,7 +122,7 @@ export default async function ComprasPage({
       categories={dialogCategories}
       defaultCurrency={defaultCurrency}
       trackCreditLimits={trackCreditLimits}
-      trigger={<Button>+ Nueva compra</Button>}
+      trigger={<Button>+ Nuevo movimiento</Button>}
     />
   );
 

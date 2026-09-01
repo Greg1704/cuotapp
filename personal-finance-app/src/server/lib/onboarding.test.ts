@@ -28,10 +28,10 @@ describe("onboarding", () => {
     expect(shouldShowChecklist(flags(true, true, true))).toBe(false); // 3
   });
 
-  it("pendingStep devuelve el faltante en orden canónico (ingreso→tarjeta→compra)", () => {
+  it("pendingStep devuelve el faltante en orden canónico (ingreso→gasto→tarjeta)", () => {
     expect(pendingStep(flags(false, false, false))).toBe("income");
-    expect(pendingStep(flags(true, false, false))).toBe("cards");
-    expect(pendingStep(flags(true, true, false))).toBe("purchases");
+    expect(pendingStep(flags(true, false, false))).toBe("purchases");
+    expect(pendingStep(flags(true, false, true))).toBe("cards");
   });
 
   it("pendingStep es null cuando están los tres pasos", () => {
@@ -40,6 +40,14 @@ describe("onboarding", () => {
 
   it("con 2 de 3, pendingStep es exactamente el único que falta", () => {
     expect(pendingStep(flags(false, true, true))).toBe("income"); // falta ingreso
-    expect(pendingStep(flags(true, true, false))).toBe("purchases"); // falta compra
+    expect(pendingStep(flags(true, true, false))).toBe("purchases"); // falta el gasto
+    expect(pendingStep(flags(true, false, true))).toBe("cards"); // falta la tarjeta
+  });
+
+  it("la tarjeta NO bloquea el primer gasto: sin tarjetas el paso pendiente es el gasto", () => {
+    // Un gasto en efectivo/transferencia no necesita tarjeta, así que el onboarding no
+    // debe empujar al alta de tarjeta antes de dejar registrar el primer movimiento.
+    expect(pendingStep(flags(true, false, false))).toBe("purchases");
+    expect(pendingStep(flags(true, false, false))).not.toBe("cards");
   });
 });

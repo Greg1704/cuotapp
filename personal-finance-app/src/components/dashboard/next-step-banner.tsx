@@ -10,20 +10,20 @@ const STEP_BANNER: Record<OnboardingStep, { text: string; cta: string; href: str
     href: "/configuracion",
   },
   cards: {
-    text: "Agregá una tarjeta para registrar tus compras.",
+    text: "Agregá una tarjeta para registrar compras en cuotas.",
     cta: "Agregar tarjeta",
     href: "/tarjetas",
   },
   purchases: {
-    text: "Registrá tu primera compra para ver tus cuotas.",
-    cta: "Registrar compra",
+    text: "Registrá tu primer gasto para empezar a ver tus números.",
+    cta: "Registrar gasto",
     href: "/compras",
   },
 };
 
 /**
  * Banner del dashboard que empuja al único paso de alta que falta (el recuadro
- * punteado generalizado: ingreso, tarjeta o compra). No renderiza nada si ya están
+ * punteado generalizado: ingreso, gasto o tarjeta). No renderiza nada si ya están
  * los tres pasos. Server Component.
  */
 export function NextStepBanner({ flags }: { flags: OnboardingFlags }) {

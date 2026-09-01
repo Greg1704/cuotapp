@@ -6,12 +6,10 @@ import { Button } from "@/components/ui/button";
 
 type Step = {
   done: boolean;
-  locked: boolean;
   title: string;
   description: string;
   href: string;
   cta: string;
-  lockedHint?: string;
 };
 
 /**
@@ -26,32 +24,30 @@ export function OnboardingChecklist({
   name: string;
   flags: OnboardingFlags;
 }) {
+  // Orden canónico: ingreso → gasto → tarjeta (ver `pendingStep` en server/lib/onboarding).
+  // Ningún paso bloquea al siguiente: un gasto en efectivo o por transferencia no
+  // necesita tarjeta, así que el primer movimiento se puede registrar sin tener una.
   const steps: Step[] = [
     {
       done: flags.hasIncome,
-      locked: false,
       title: "Configurá tu ingreso mensual",
       description: "Lo usamos para calcular tu disponible neto de cuotas.",
       href: "/configuracion",
       cta: "Configurar ingreso",
     },
     {
-      done: flags.hasCards,
-      locked: false,
-      title: "Agregá tu primera tarjeta",
-      description: "Definí su ciclo de cierre y vencimiento.",
-      href: "/tarjetas",
-      cta: "Agregar tarjeta",
+      done: flags.hasPurchases,
+      title: "Registrá tu primer gasto",
+      description: "En efectivo, por transferencia o con tarjeta: lo que hayas gastado.",
+      href: "/compras",
+      cta: "Registrar gasto",
     },
     {
-      done: flags.hasPurchases,
-      // Una compra necesita una tarjeta: el paso queda bloqueado hasta tener una.
-      locked: !flags.hasCards,
-      title: "Registrá tu primera compra",
-      description: "Cargá una compra en cuotas para ver tu flujo a futuro.",
-      href: "/compras",
-      cta: "Registrar compra",
-      lockedHint: "Agregá una tarjeta primero",
+      done: flags.hasCards,
+      title: "Agregá tu primera tarjeta",
+      description: "Cuando quieras cargar compras en cuotas, definí su ciclo de cierre y vencimiento.",
+      href: "/tarjetas",
+      cta: "Agregar tarjeta",
     },
   ];
 
@@ -62,7 +58,8 @@ export function OnboardingChecklist({
           Hola{name ? `, ${name}` : ""} 👋
         </h1>
         <p className="text-muted-foreground text-sm">
-          Bienvenido a CuotApp. Completá estos pasos para empezar a ver tus cuotas.
+          Bienvenido a CuotApp. Empezá por acá: no hace falta cargar una tarjeta para
+          registrar tu primer gasto.
         </p>
       </header>
 
@@ -92,10 +89,6 @@ export function OnboardingChecklist({
             {step.done ? (
               <span className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
                 Listo
-              </span>
-            ) : step.locked ? (
-              <span className="text-muted-foreground max-w-[8rem] text-right text-xs">
-                {step.lockedHint}
               </span>
             ) : (
               <Button asChild size="sm">

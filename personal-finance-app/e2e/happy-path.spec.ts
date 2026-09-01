@@ -95,7 +95,7 @@ test.describe("compra en cuotas (RNF-6.3, parte 2)", () => {
     await page.goto("/compras");
     await page.waitForLoadState("networkidle");
     // Igual que en tarjetas: sin compras hay dos botones (header + estado vacío).
-    await page.getByRole("button", { name: "+ Nueva compra" }).first().click();
+    await page.getByRole("button", { name: "+ Nuevo movimiento" }).first().click();
     const purchaseDialog = page.getByRole("dialog");
     await expect(purchaseDialog).toBeVisible();
     await selectOption(page, "Tarjeta", new RegExp(cardName));
@@ -146,7 +146,7 @@ test.describe("gasto no-crédito (ahorros)", () => {
     // Registrar un gasto en efectivo (sin tarjeta, pago único, descuenta del ahorro).
     await page.goto("/compras");
     await page.waitForLoadState("networkidle");
-    await page.getByRole("button", { name: "+ Nueva compra" }).first().click();
+    await page.getByRole("button", { name: "+ Nuevo movimiento" }).first().click();
     const dialog = page.getByRole("dialog");
     await expect(dialog).toBeVisible();
     await selectOption(page, "Medio de pago", "Efectivo");
