@@ -54,3 +54,86 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  # Los E2E van en un job APARTE del de quality: corren en paralelo (feedback rápido
+  # de typecheck/lint sin esperar al browser) y necesitan infra propia —una Postgres
+  # real y un browser—, que sería peso muerto para el resto de los checks.
+  e2e:
+    name: e2e (Playwright)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: personal-finance-app
+
+    # Postgres REAL como service container: los E2E ejercitan el flujo completo
+    # (signup, alta de tarjeta, compra en cuotas), así que hay escrituras de verdad.
+    # Misma versión mayor que el docker-compose de dev y que Neon en prod (RNF-4.3).
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: cuotas_test
+          POSTGRES_USER: app
+          POSTGRES_PASSWORD: dev
+        ports:
+          - 5432:5432
+        # Sin el health check, los pasos siguientes arrancan antes de que Postgres
+        # acepte conexiones y la migración falla por "connection refused".
+        options: >-
+          --health-cmd "pg_isready -U app -d cuotas_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: "postgresql://app:dev@localhost:5432/cuotas_test?schema=public"
+      DIRECT_URL: "postgresql://app:dev@localhost:5432/cuotas_test?schema=public"
+      # La que lee playwright.config.ts para el server bajo test.
+      DATABASE_URL_TEST: "postgresql://app:dev@localhost:5432/cuotas_test?schema=public"
+      BETTER_AUTH_SECRET: "ci-dummy-secret-e2e-only-00000000000000000000000"
+      BETTER_AUTH_URL: "http://localhost:3000"
+      NEXT_PUBLIC_APP_URL: "http://localhost:3000"
+      PORT: "3000"
+      # El proyecto asume runtime UTC (ver docs/ARCHITECTURE.md → "Zona horaria del
+      # runtime"). Los runners ya corren en UTC; lo fijamos explícito para que el
+      # invariante quede escrito y no dependa del default del proveedor.
+      TZ: "UTC"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: personal-finance-app/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Solo chromium: playwright.config.ts define un único project. --with-deps
+      # instala además las librerías de sistema que el browser necesita en el runner.
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      # migrate deploy (no `migrate dev`): aplica las migraciones versionadas tal cual,
+      # sin generar ninguna nueva. Deja la DB de test con el schema real.
+      - name: Run migrations
+        run: npx prisma migrate deploy
+
+      # El build es requisito del `next start` que levanta playwright.config.ts en CI.
+      - name: Build
+        run: npm run build
+
+      - name: E2E tests
+        run: npm run test:e2e
+
+      # Solo si algo falla: los traces de Playwright (retries: 2 + trace on-first-retry)
+      # permiten reproducir la corrida fallida paso a paso desde el navegador.
+      - name: Upload traces on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-traces
+          path: personal-finance-app/test-results/
+          retention-days: 7

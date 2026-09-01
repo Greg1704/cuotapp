@@ -567,10 +567,30 @@ Command alcanza.)*
 
 ### CI (GitHub Actions, Fase 5)
 
-GitHub Actions queda como **portón de calidad** (no buildea imagen ni deploya): en cada push
-a `main` y cada PR corre `typecheck`, `lint`, `test` y `build` (RNF-6.2). El **build y el
-deploy los hace Vercel** al detectar el push. Son dos engranajes separados: CI verde por un
-lado, deploy de Vercel por otro.
+GitHub Actions queda como **portón de calidad** (no buildea imagen ni deploya). El **build y
+el deploy los hace Vercel** al detectar el push: son dos engranajes separados, CI verde por
+un lado, deploy de Vercel por otro. En cada push a `main` y cada PR corren **dos jobs en
+paralelo** (RNF-6.2):
+
+- **`quality`** — `typecheck`, `lint`, `test` (Vitest) y `build`. Sin base de datos: nada de
+  eso se conecta a Postgres, solo necesita que las variables de entorno existan.
+- **`e2e`** — Playwright contra la app real (RNF-6.3), con una **Postgres 16 de verdad** como
+  *service container* (misma versión mayor que el compose de dev y que Neon en prod) sobre la
+  que se aplica `prisma migrate deploy`. Es un job aparte porque necesita esa infra propia
+  —base y browser— que sería peso muerto para el resto de los checks.
+
+**En CI los E2E corren contra el build de producción (`next start`), no contra `next dev`.**
+`next dev` compila cada ruta en la primera visita y esa demora agota los timeouts de la
+primera navegación de cada test: el mismo test pasa o falla según qué rutas estén tibias.
+Sirviendo el build ya compilado, la suite es estable y ~2× más rápida. Dos consecuencias
+atadas a esa decisión: `playwright.config.ts` elige el comando según `process.env.CI`, y
+`next.config.ts` desactiva `output: "standalone"` en CI (`next start` no lo soporta; ese
+bundle solo lo consume el Dockerfile, que el CI no construye).
+
+> **Puerto:** `playwright.config.ts` deriva el puerto de `PORT` (default 3000) y **se lo pasa
+> al server que levanta**, de modo que la app arranque en el mismo puerto que los tests
+> esperan. Antes el config fijaba 3000 mientras `npm run dev` usaba 3005, y el arranque de la
+> corrida local expiraba.
 
 ---
 

@@ -55,7 +55,10 @@ const nextConfig: NextConfig = {
   // `standalone` es para el Dockerfile de producción (camino VPS a futuro). En Vercel
   // NO va: rompe el wiring de rutas del App Router y devuelve 404 en todo. Vercel
   // expone VERCEL=1 en el build, así que ahí lo desactivamos.
-  output: process.env.VERCEL ? undefined : "standalone",
+  // En CI tampoco: los E2E sirven la app con `next start`, que no soporta standalone
+  // (avisa "does not work with output: standalone"). El bundle standalone solo lo
+  // consume el Dockerfile, que el CI no construye.
+  output: process.env.VERCEL || process.env.CI ? undefined : "standalone",
   reactCompiler: true,
   // En dev, Next bloquea los assets /_next/* pedidos desde orígenes que no sean
   // localhost. El E2E en Docker entra por el alias del contenedor (cuotapp:3000),
