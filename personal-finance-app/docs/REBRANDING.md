@@ -24,7 +24,8 @@ entrada (foto del ticket, PDF del resumen).
 > del alta: viven detrás del toggle *"Datos de la tarjeta (opcional)"* y ninguno es
 > obligatorio (`last4` pasó a `String?` en la DB, migración `card_optional_last4`). El
 > **nivel 3 queda como está por decisión**: el banco sigue siendo requerido y el límite en
-> su lugar actual. El nivel 4 (defaults por banco para cierre/vencimiento) sigue abierto.
+> su lugar actual. El **nivel 4 está decidido pero no implementado** (defaults genéricos de
+> ciclo, ver más abajo).
 >
 > Dos trampas que aparecieron al implementarlo, ya resueltas y con test:
 > - El chequeo de duplicados era `banco + last4`, y **Prisma ignora un filtro cuyo valor es
@@ -84,12 +85,26 @@ Las features que dependen de esos datos se **activan solo si el usuario los carg
 - La sección de **tarjetas vencidas / renovación** tiene que tolerar tarjetas sin MM/AA
   (hoy asume que crédito ⇒ hay vencimiento).
 
-### Pregunta abierta
+### Nivel 4 — defaults del ciclo (decidido, pendiente de implementar)
 
-`closingDay` y `dueDay` son estructuralmente obligatorios, pero **tampoco son datos que
-la gente sepa de memoria**. Un set de **defaults por banco** (o un "no lo sé, poné algo
-razonable y lo ajusto después") podría bajar más la fricción que cualquier rediseño del
-modal.
+`closingDay` y `dueDay` son estructuralmente obligatorios —sin ciclo no hay cuotas— pero
+**tampoco son datos que la gente sepa de memoria**.
+
+**Decisión: defaults genéricos, cierre el 1 y vencimiento el 8, editables después.**
+
+- **NO defaults por banco.** Los días de cierre y vencimiento no son uniformes por
+  emisor: varían por producto y por cliente. Una tabla "Galicia cierra el 20" sería
+  **inventar un dato financiero con apariencia de verdad**, que en una app de plata es
+  peor que preguntarlo. Un default genérico es honesto: nadie lo va a confundir con el
+  ciclo real de su tarjeta.
+- Cierre 1 / vencimiento 8 mantiene la relación correcta (el vencimiento cae después del
+  cierre, dentro del mismo mes) y respeta el supuesto de `generateInstallments` de que
+  ambos días caen en la primera quincena, donde no hay riesgo de desborde en meses cortos
+  (ver ARCHITECTURE.md → ajuste de día hábil).
+- El usuario los edita cuando conozca los suyos, y las compras que cargue después se
+  recalculan con el ciclo nuevo. **Ojo con lo ya cargado:** las cuotas se materializan al
+  crear la compra, así que cambiar el ciclo NO reescribe las cuotas existentes. Definir al
+  implementar si se avisa, se ofrece recalcular, o se deja como está.
 
 ---
 
@@ -171,24 +186,42 @@ datos actual: compra y suscripción ya son entidades hermanas.
   limit sí o sí — y el patrón ya está resuelto en el repo: el freno por IP + global
   respaldado en la DB de `src/server/actions/demo.ts`. Se reusa tal cual (serverless-safe,
   sin sumar Redis; ver la decisión en `ARCHITECTURE.md` → Redis).
-- **Costo:** una extracción así ronda ~1-2K tokens de entrada y ~150 de salida ⇒
-  fracciones de centavo por carga, incluso con los modelos tope de gama. No es el
-  problema; el problema es el abuso sin freno.
+- **Costo:** una extracción así ronda ~1-2K tokens de entrada y ~150 de salida, y con el
+  modelo chico elegido el costo por carga es despreciable. El problema no es el costo
+  unitario sino el **abuso sin freno** de un endpoint público.
 - **Latencia:** 1-3 s. No hace falta streaming (el JSON se necesita entero igual): alcanza
   un estado de "interpretando…" en el form.
 
+### Decisiones tomadas
+
+- **Input único, no chat.** Es una extracción de UN turno: un campo de texto y un
+  resultado, sin historial de conversación. Más simple, más barato y mejor UX que un chat.
+  Lo que falte no se repregunta por chat: el resultado llega con ese campo **vacío y
+  marcado**, y lo completa el formulario, que ya sabe pedir lo que falta.
+- **Proveedor: DeepSeek, su modelo más chico.** La tarea es una extracción acotada a un
+  schema fijo; no necesita un modelo grande, y el costo por carga es el argumento
+  principal en una feature que se dispara en cada gasto que el usuario registre.
+  - **Verificar el identificador exacto del modelo y su precio en la documentación de
+    DeepSeek al momento de implementar** — su catálogo cambia y no conviene hardcodear un
+    nombre de memoria. El modelo debe quedar en una **variable de entorno**, no incrustado
+    en el código, para poder cambiarlo sin tocar la app.
+  - **Verificar también la forma de forzar un JSON con estructura garantizada** que ofrezca
+    su API (modo JSON, function calling, o pedirlo por prompt). De eso depende cuánta
+    tolerancia a fallos hay que poner del lado nuestro. En el peor caso —el modelo devuelve
+    algo malformado— la defensa ya está: `schema.parse()` lo rechaza y el usuario ve el
+    formulario vacío, nunca un dato inventado.
+  - **Implicancia de privacidad:** el texto del gasto y la lista de nombres de tarjetas y
+    categorías del usuario salen hacia DeepSeek. Hay que decirlo en la UI (ya anotado
+    arriba) y no mandar más que id + nombre.
+
 ### Preguntas abiertas
 
-- **Qué modelo.** Es una decisión de costo/calidad, y conviene medirla con casos reales
-  argentinos ("12 cuotas sin interés", "3 pagos de", montos con punto de miles) antes de
-  fijarla. Los modelos más chicos pueden alcanzar de sobra para una extracción acotada.
-- **Structured outputs vs. tool use.** Las dos formas de forzar un JSON con forma
-  garantizada. Hay que elegir una y documentar por qué.
-- **¿Chat o input único?** "Chat" sugiere ida y vuelta; para una extracción de un turno
-  quizás alcance **un input y un resultado**, sin historial. Más simple, más barato, y
-  probablemente mejor UX. El ida y vuelta solo se justifica para repreguntar lo faltante.
 - **¿Y si no hay API key?** La feature tiene que **degradar sola** (ocultarse), no romper
   la app. Importa para que el repo siga siendo clonable y usable por cualquiera.
+- **Calidad del prompt con frases argentinas reales** ("12 cuotas sin interés", "3 pagos
+  de", montos con punto de miles, "la del Galicia"). Solo se puede medir con la key puesta
+  y casos de verdad; conviene armar un set de frases de prueba antes de dar la feature por
+  terminada.
 
 ---
 
