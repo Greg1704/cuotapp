@@ -15,7 +15,7 @@ pensado para retomar el trabajo en otra sesión sin tener que reconstruir el con
 | # | Paso | Estado |
 |---|---|---|
 | — | Plan y diseño | ✅ |
-| 1 | Transporte — `src/server/lib/llm/` | ⏳ |
+| 1 | Transporte — `src/server/lib/llm/` | ✅ |
 | 2 | Schema de extracción y reparaciones | ⏳ |
 | 3 | El prompt | ⏳ |
 | 4 | `extractPurchase()` + transporte `fixture` | ⏳ |
@@ -131,7 +131,23 @@ de algunas de sus excepciones"*. Acá ese body incluiría el gasto del usuario y
 de sus tarjetas, y `.claude/rules/seguridad.md` ya prohíbe loguear eso.
 
 **f) Los mensajes de error son de UI y van en español**, y no nombran al proveedor:
-*"No pude interpretarlo"*, nunca *"DeepSeek devolvió 429"*.
+*"No pude interpretarlo"*, nunca *"DeepSeek devolvió 429"*. Hay un test que lo custodia
+(ningún mensaje puede contener el host, el modelo ni la key).
+
+### Resultado
+
+`src/server/lib/llm/` → `errors.ts`, `types.ts`, `config.ts`, `client.ts`, `index.ts`,
+más 36 tests. Las variables quedaron documentadas en `.env.example`, todas opcionales.
+
+Dos cosas que aparecieron al bajarlo a código y no estaban en el plan:
+
+- **`isConfigured()` exige key Y modelo**, no solo la key. El modelo no tiene default
+  incrustado a propósito (misma razón que la variable de entorno), así que sin él la
+  feature tampoco puede funcionar y tiene que ocultarse igual.
+- **Los tests necesitaron tipar el mock de `fetch`.** `vi.fn()` sin tipo deja
+  `mock.calls` como tupla vacía y `tsc` lo rechaza; se resolvió con `vi.fn<typeof fetch>`
+  y dos helpers (`calledUrl`, `calledBody`) con la forma del request tipada — índice
+  abierto en `unknown`, nunca `any` (convención del repo).
 
 ---
 
