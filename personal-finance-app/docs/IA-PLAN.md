@@ -17,7 +17,7 @@ pensado para retomar el trabajo en otra sesión sin tener que reconstruir el con
 | — | Plan y diseño | ✅ |
 | 1 | Transporte — `src/server/lib/llm/` | ✅ |
 | 2 | Schema de extracción y reparaciones | ✅ |
-| 3 | El prompt | ⏳ |
+| 3 | El prompt | ✅ |
 | 4 | `extractPurchase()` + transporte `fixture` | ⏳ |
 | 5 | Corpus y su runner (`--dry-run`) | ⏳ |
 | 6 | Suscripciones y ruteo | ⏳ |
@@ -272,6 +272,33 @@ no escribió. Cuesta una línea; ponerlo ahora evita tener que acordarse justo c
 **El JSON Schema se deriva**, no se escribe a mano: `z.toJSONSchema()` sobre el schema de
 extracción (verificado: Zod 4.4.3 lo trae). Un schema escrito en paralelo se desincroniza
 en el primer cambio y nadie se entera hasta que un campo llega y se descarta en silencio.
+
+### Resultado
+
+`prompt.ts` con `buildInstructions()` / `buildPrompt()`, más 30 tests (96 en la carpeta).
+
+**Las instrucciones quedaron en español, y es una decisión con costo asumido.** Qulmara
+eligió inglés canónico porque los modelos calibran mejor ahí y el español tokeniza 12-26%
+más caro. Acá pesa más lo otro: **estas reglas son sobre el español**. La mitad del
+contenido son ejemplos de cómo escribe un argentino un gasto ("45 lucas", "12 cuotas de 45
+mil", "la del Galicia"), y meterlos dentro de prosa en inglés hace que el ejemplo y la
+regla hablen idiomas distintos. Con un prefijo de unos cientos de tokens, ese 26% son
+decenas de tokens — menos de lo que cuesta una regla mal entendida. Si en la calibración
+aparece que el modelo obedece mejor en inglés, se revisa.
+
+**La instrucción que reemplaza a la validación imposible.** La fila "montos en centavos"
+que se sacó de la tabla del validador (no hay forma de distinguir `4500000` centavos de un
+millón y medio de pesos) vive ahora acá, como regla explícita con ejemplo. Es el patrón
+general: lo que no se puede detectar después, se pide bien antes.
+
+**Los tests del prompt son sobre las reglas, no sobre el texto.** No comparan el prompt
+contra un string congelado —eso pelearía con la calibración, que justamente va a reescribir
+este archivo— sino que verifican que cada regla que importa siga presente: montos en
+unidades, la distinción cuota/total con sus dos ejemplos, la prohibición de multiplicar, el
+id exacto de tarjeta. Un refactor puede reescribir la redacción; no puede perder una regla.
+
+**El nonce quedó implementado y testeado**, incluido el caso de un texto que imita la marca
+de cierre. En el proyecto hermano esto sigue pendiente esperando su disparador.
 
 ---
 
