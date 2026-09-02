@@ -19,7 +19,7 @@ pensado para retomar el trabajo en otra sesión sin tener que reconstruir el con
 | 2 | Schema de extracción y reparaciones | ✅ |
 | 3 | El prompt | ✅ |
 | 4 | `extractPurchase()` + transporte `fixture` | ✅ |
-| 5 | Corpus y su runner (`--dry-run`) | ⏳ |
+| 5 | Corpus y su runner (`--dry-run`) | ✅ |
 | 6 | Suscripciones y ruteo | ⏳ |
 | 7 | `aiEnabled()` + degradación | ⏳ |
 | 8 | Server Action, prefill y campos "sugerido" | ⏳ |
@@ -384,6 +384,45 @@ lo caza `tsc` en vez de aparecer disfrazado de fallo del modelo.
 - **"la del Galicia"** con una tarjeta Galicia, con dos, y con ninguna (⇒ vacío + marcado).
 - **Ambigüedad deliberada**: "compré una tele" ⇒ casi todo vacío.
 - **Ruteo**: *"me suscribí a Spotify, 4200 por mes"* tiene que ir a `subscriptionSchema`.
+
+### Resultado
+
+`corpus.ts` (23 casos), `scripts/extract-corpus.ts` (`npm run corpus`) y `corpus.test.ts`.
+
+**Tres formas de declarar lo esperado, y las tres hicieron falta:**
+
+- `expected` — el campo vale exactamente esto.
+- `absent` — el campo NO tiene que estar. **Es la mitad que se olvida**: un corpus que solo
+  verifica lo que se llena no puede detectar que el modelo esté inventando. El caso `vago`
+  ("compré una tele") existe solo para eso.
+- `present` — tiene que estar, sin importar el valor. Para lo **genuinamente ambiguo**:
+  "el martes pasado" puede ser ayer o el martes de la semana anterior, y elegir una sería
+  congelar una suposición nuestra como si fuera verdad — el error de método que Qulmara
+  documentó. Lo falsable es que resuelva *alguna* fecha.
+
+**Lo que midió el `--dry-run`, que es lo único que corre sin key:** ~692 tokens de prefijo
+estático contra ~118 variables. Contra los ~1.680/23 de Qulmara, confirma con números lo
+que `IA-EXTRACCION.md` §4 sostenía: **acá el caching no es la palanca**. El ordenamiento se
+mantiene porque es gratis, pero el costo va a estar en el output.
+
+**Las lecciones de método quedaron en el código, no en una nota al pie:**
+
+- `--repeat N` reporta **celdas inestables** entre corridas idénticas. Es la barra de ruido:
+  una mejora que no la supere no es una mejora.
+- La fila `POR CAMPO`, que es el punto: un fallo suelto es una frase difícil, una columna en
+  4/20 es un prompt que no explica ese campo, y dice cuál.
+- Una llamada que falla se imprime `·` con su motivo y **se excluye**, nunca se cuenta como
+  campo equivocado. Contarla fabricaría datos a partir de una llamada que no dio ninguna
+  opinión, justo en la herramienta cuyo trabajo es separar señal de ruido.
+- Las métricas dicen `n/a` cuando nadie contó (transporte de fixtures), nunca `0`.
+
+**`corpus.test.ts` corre los casos que ya tengan fixture, y saltea el resto.** Hoy hay una
+sola respuesta guardada, así que la suite es chica; a medida que
+`npm run corpus -- --save-fixtures` vaya dejando respuestas reales, **crece sola sin tocar
+código**. No verifica al modelo (una respuesta guardada no se sorprende) sino todo lo que
+viene después —parseo, reparaciones, derivación, pertenencia— sobre respuestas reales en
+vez de inventadas. Aparte verifica la integridad del propio corpus: etiquetas únicas,
+ningún caso que no afirme nada, ninguno que se contradiga.
 
 ---
 
