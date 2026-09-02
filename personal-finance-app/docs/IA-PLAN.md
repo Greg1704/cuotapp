@@ -203,6 +203,37 @@ Cuatro cosas que se decidieron al bajarlo a código, y ninguna estaba en el plan
   inventara, la utilización del límite quedaría mal **para siempre**, porque se guarda como
   snapshot inmutable.
 
+### La derivación del total: "12 cuotas de 45 mil"
+
+Decidido con el usuario durante el paso 2, y es la decisión con más consecuencias de todo
+el bloque A. **El modelo no multiplica: devuelve `installmentAmount: 45000` y
+`totalInstallments: 12`, y el total lo calcula nuestro código.**
+
+**Por qué.** Distinguir "la cuota es 45 mil" de "el total es 45 mil" es una
+**clasificación** —en qué campo va el número que leyó— y eso los modelos lo hacen bien.
+Multiplicar es una **cuenta**, la hacen peor, y sobre todo: *un total equivocado es
+indistinguible de uno correcto mirando la respuesta*, así que ni el validador ni el usuario
+tienen cómo detectarlo. Es el error más caro que la feature puede cometer (un factor de 12
+sobre el compromiso futuro) y es exactamente lo que prohíbe
+`.claude/rules/dinero-y-fechas.md`.
+
+**Qué pasa cuando la frase da precio Y cuota** (*"una tele de 500 mil en 12 cuotas de 45
+mil"*): el precio va a `totalAmount` y el producto a `financedTotal`. No es una invención:
+es el modelo de datos que la app ya tiene (ARCHITECTURE.md → cuotas con interés: el
+comercio informa "N cuotas de X" y el recargo se deriva). La compra queda bien cargada,
+con su TEM.
+
+| La frase dice | `totalAmount` | `financedTotal` |
+|---|---|---|
+| solo la cuota | derivado | — (no se sabe si hay recargo) |
+| precio y cuota | lo dicho | derivado |
+| precio y cuota que coinciden | lo dicho | — (iguales ⇒ sin recargo) |
+| el producto da **menos** que el precio | lo dicho | — (se contradicen: no se deriva) |
+
+`installmentAmount` es el primer campo que **no** existe en `purchaseSchema`. El test de
+deriva lo detectó ni bien se agregó, así que la excepción quedó declarada en
+`EXTRACTION_ONLY_FIELDS` — sumar otro campo así es una decisión explícita, no un descuido.
+
 ### Corrección a `IA-EXTRACCION.md` §7
 
 La tabla de reparaciones tenía una fila **imposible de implementar**: *"`totalAmount` en

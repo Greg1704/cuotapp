@@ -50,6 +50,13 @@ export const purchaseExtractionSchema = z.object({
     .number()
     .describe("Cantidad de cuotas, entero de 1 a 60. 1 si es un pago único.")
     .optional(),
+  installmentAmount: z
+    .number()
+    .describe(
+      "Monto de UNA cuota, en unidades, cuando la frase lo diga así " +
+        '("12 cuotas de 45 mil" → 45000). No multiplicar: de eso se encarga la app.'
+    )
+    .optional(),
   purchaseDate: z.string().describe("Fecha de la compra, formato YYYY-MM-DD.").optional(),
   financedTotal: z
     .number()

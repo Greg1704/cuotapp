@@ -3,6 +3,7 @@ import { parseISO } from "@/server/lib/dates";
 import type {
   Currency,
   ExtractionContext,
+  ExtractionField,
   ExtractionOutcome,
   PaymentMethod,
   PurchaseDraft,
@@ -55,9 +56,9 @@ export function parsePurchaseExtraction(
     values[field] = value;
     filled.push(field);
   }
-  const repair = (field: PurchaseField, what: Repair["what"]) =>
+  const repair = (field: ExtractionField, what: Repair["what"]) =>
     repaired.push({ field, what });
-  const reject = (field: PurchaseField, reason: RejectionReason) =>
+  const reject = (field: ExtractionField, reason: RejectionReason) =>
     rejected.push({ field, reason });
 
   // --- Enums: se normaliza el vocabulario, se rechaza lo desconocido ---------
@@ -106,6 +107,14 @@ export function parsePurchaseExtraction(
     accept("totalInstallments", value);
   });
 
+  // El monto de una cuota no va al formulario: alimenta la derivación de más abajo.
+  let installmentAmount: number | null = null;
+  read(raw, "installmentAmount", (value) => {
+    const amount = asPositiveNumber(value);
+    if (amount === null) return reject("installmentAmount", numberReason(value));
+    installmentAmount = amount;
+  });
+
   // --- Referencias: pertenencia, jamás parecido -----------------------------
   read(raw, "cardId", (value) => {
     const id = asText(value);
@@ -144,7 +153,78 @@ export function parsePurchaseExtraction(
     accept("purchaseDate", date);
   });
 
+  deriveTotals({ values, installmentAmount, accept, repair, reject });
+
   return { values, filled, repaired, rejected };
+}
+
+/**
+ * "12 cuotas de 45 mil" → 540.000, y la multiplicación la hacemos nosotros.
+ *
+ * **Por qué el modelo no multiplica.** Distinguir "la cuota es 45 mil" de "el total es 45
+ * mil" es una **clasificación** —en qué campo va el número que leyó— y eso los modelos lo
+ * hacen bien. Multiplicar es una **cuenta**, la hacen peor, y sobre todo: un total
+ * equivocado es indistinguible de uno correcto mirando la respuesta, así que ni el
+ * validador ni el usuario tienen cómo detectarlo. Es exactamente lo que prohíbe
+ * `.claude/rules/dinero-y-fechas.md`.
+ *
+ * Los tres casos, que salen del modelo de datos de la app (ARCHITECTURE.md → cuotas con
+ * interés: el comercio informa "N cuotas de X" y el recargo se deriva):
+ *
+ * | La frase dice | `totalAmount` | `financedTotal` |
+ * |---|---|---|
+ * | solo la cuota — *"12 cuotas de 45 mil"* | 540.000 (derivado) | — (no se sabe si hay recargo) |
+ * | precio y cuota — *"una tele de 500 mil en 12 de 45 mil"* | 500.000 (lo dicho) | 540.000 (derivado) |
+ * | precio y cuota que coinciden | lo dicho | — (iguales ⇒ sin recargo) |
+ *
+ * **Una derivación que daría un total con recargo MENOR al precio no se hace.** Ahí las
+ * dos lecturas se contradicen y no hay forma de saber cuál está mal, así que se descarta
+ * la derivada y se conserva lo que la frase dijo textual. Se registra el rechazo: si se
+ * repite, el prompt está confundiendo precio con cuota.
+ *
+ * Ojo con la distinción: esto es una **derivación** (produce un valor que no existía), no
+ * una regla cruzada de validación. Que "efectivo" no admita 3 cuotas lo sigue decidiendo
+ * `purchaseSchema`, que es la autoridad.
+ */
+function deriveTotals({
+  values,
+  installmentAmount,
+  accept,
+  repair,
+  reject,
+}: {
+  values: PurchaseDraft;
+  installmentAmount: number | null;
+  accept: <K extends PurchaseField>(field: K, value: PurchaseDraft[K]) => void;
+  repair: (field: ExtractionField, what: Repair["what"]) => void;
+  reject: (field: ExtractionField, reason: RejectionReason) => void;
+}): void {
+  if (installmentAmount === null) return;
+
+  const installments = values.totalInstallments;
+  if (installments === undefined) {
+    // Vino el monto de la cuota sin cuántas: no hay con qué multiplicar. No se asume 1,
+    // que convertiría "cuotas de 45 mil" en una compra de 45 mil.
+    return reject("installmentAmount", "sin-cuotas-para-derivar");
+  }
+
+  // Redondeo al centavo: el producto en punto flotante puede dar 539999.9999999999, y ese
+  // número entra al formulario y de ahí a la conversión a centavos.
+  const derived = Math.round(installmentAmount * installments * 100) / 100;
+
+  if (values.totalAmount === undefined) {
+    repair("totalAmount", "derivado");
+    return accept("totalAmount", derived);
+  }
+  // Iguales ⇒ no hay recargo (ARCHITECTURE.md). Dejar `financedTotal` vacío es
+  // exactamente lo que la app espera en ese caso.
+  if (derived === values.totalAmount) return;
+  if (derived < values.totalAmount) {
+    return reject("financedTotal", "contradice-el-monto");
+  }
+
+  repair("financedTotal", "derivado");
+  accept("financedTotal", derived);
 }
 
 const MIN_INSTALLMENTS = 1;
@@ -208,7 +288,7 @@ function foldCase(value: string): string {
  */
 function read(
   raw: Record<string, unknown>,
-  field: PurchaseField,
+  field: ExtractionField,
   handle: (value: unknown) => void
 ): void {
   const value = raw[field];
@@ -218,8 +298,8 @@ function read(
 
 type TextHandlers = {
   accept: <K extends PurchaseField>(field: K, value: PurchaseDraft[K]) => void;
-  repair: (field: PurchaseField, what: Repair["what"]) => void;
-  reject: (field: PurchaseField, reason: RejectionReason) => void;
+  repair: (field: ExtractionField, what: Repair["what"]) => void;
+  reject: (field: ExtractionField, reason: RejectionReason) => void;
 };
 
 function readText(

@@ -165,6 +165,98 @@ describe("parsePurchaseExtraction", () => {
     });
   });
 
+  /**
+   * El error más caro que esta feature puede cometer: confundir "12 cuotas de 45 mil" con
+   * "45 mil en 12 cuotas" es un factor de 12 sobre el compromiso futuro del usuario.
+   */
+  describe("derivación del total: la multiplicación la hacemos nosotros", () => {
+    it("solo la cuota ⇒ el total se deriva", () => {
+      const result = parse({ installmentAmount: 45000, totalInstallments: 12 });
+      expect(result.values.totalAmount).toBe(540000);
+      expect(result.values.financedTotal).toBeUndefined();
+      expect(result.repaired).toContainEqual({ field: "totalAmount", what: "derivado" });
+    });
+
+    it("un total derivado queda marcado como venido de la IA", () => {
+      const result = parse({ installmentAmount: 45000, totalInstallments: 12 });
+      expect(result.filled).toContain("totalAmount");
+    });
+
+    // "una tele de 500 mil en 12 cuotas de 45 mil": el precio es el original y el producto
+    // de las cuotas es el total con recargo. Es el modelo de datos de la app.
+    it("precio y cuota ⇒ el precio es el monto y el producto es el total con recargo", () => {
+      const result = parse({
+        totalAmount: 500000,
+        installmentAmount: 45000,
+        totalInstallments: 12,
+      });
+      expect(result.values.totalAmount).toBe(500000);
+      expect(result.values.financedTotal).toBe(540000);
+      expect(result.repaired).toContainEqual({ field: "financedTotal", what: "derivado" });
+    });
+
+    it("si coinciden, no hay recargo y financedTotal queda vacío", () => {
+      const result = parse({
+        totalAmount: 540000,
+        installmentAmount: 45000,
+        totalInstallments: 12,
+      });
+      expect(result.values.totalAmount).toBe(540000);
+      expect(result.values.financedTotal).toBeUndefined();
+      expect(result.repaired).toEqual([]);
+    });
+
+    // Las dos lecturas se contradicen y no hay forma de saber cuál está mal: se conserva
+    // lo que la frase dijo textual y se descarta lo derivado.
+    it("si el producto da MENOS que el precio, no se deriva nada", () => {
+      const result = parse({
+        totalAmount: 600000,
+        installmentAmount: 45000,
+        totalInstallments: 12,
+      });
+      expect(result.values.totalAmount).toBe(600000);
+      expect(result.values.financedTotal).toBeUndefined();
+      expect(result.rejected).toEqual([
+        { field: "financedTotal", reason: "contradice-el-monto" },
+      ]);
+    });
+
+    // Asumir 1 cuota convertiría "cuotas de 45 mil" en una compra de 45 mil.
+    it("la cuota sin cantidad de cuotas no deriva nada, ni asume 1", () => {
+      const result = parse({ installmentAmount: 45000 });
+      expect(result.values.totalAmount).toBeUndefined();
+      expect(result.rejected).toEqual([
+        { field: "installmentAmount", reason: "sin-cuotas-para-derivar" },
+      ]);
+    });
+
+    it("una cuota inválida se descarta antes de multiplicar nada", () => {
+      const result = parse({ installmentAmount: -100, totalInstallments: 12 });
+      expect(result.values.totalAmount).toBeUndefined();
+      expect(result.rejected).toEqual([
+        { field: "installmentAmount", reason: "fuera-de-rango" },
+      ]);
+    });
+
+    it("cuotas fuera de rango no arrastran una derivación", () => {
+      const result = parse({ installmentAmount: 45000, totalInstallments: 99 });
+      expect(result.values.totalAmount).toBeUndefined();
+      expect(result.values.totalInstallments).toBeUndefined();
+    });
+
+    // 4816.67 * 12 da 57800.039999999994 en punto flotante, y ese número entraría al
+    // formulario y de ahí a la conversión a centavos.
+    it("redondea al centavo: nada de 57800.039999999994", () => {
+      const result = parse({ installmentAmount: 4816.67, totalInstallments: 12 });
+      expect(result.values.totalAmount).toBe(57800.04);
+    });
+
+    it("un pago único con su monto de 'cuota' da el mismo monto", () => {
+      const result = parse({ installmentAmount: 45000, totalInstallments: 1 });
+      expect(result.values.totalAmount).toBe(45000);
+    });
+  });
+
   describe("referencias: pertenencia, nunca parecido", () => {
     it("acepta un id que está entre las tarjetas del usuario", () => {
       expect(parse({ cardId: "card_galicia" }).values.cardId).toBe("card_galicia");
@@ -258,7 +350,8 @@ describe("parsePurchaseExtraction", () => {
       const result = parse({ currency: "euros", totalInstallments: 99, cardId: "nope" });
       for (const { field } of result.rejected) {
         expect(result.filled).not.toContain(field);
-        expect(result.values[field]).toBeUndefined();
+        // `installmentAmount` no es un campo del formulario: no tiene lugar en `values`.
+        if (field !== "installmentAmount") expect(result.values[field]).toBeUndefined();
       }
     });
 

@@ -30,6 +30,19 @@ export type PurchaseDraft = {
 export type PurchaseField = keyof PurchaseDraft;
 
 /**
+ * Campos que se le piden al modelo pero que NO son del formulario.
+ *
+ * Hoy solo `installmentAmount`, el monto de UNA cuota. Existe porque el retail argentino
+ * informa el plan como "12 cuotas de 45 mil", y pedirle al modelo que devuelva 540.000
+ * sería pedirle que multiplique: la multiplicación la hace nuestro código
+ * (`.claude/rules/dinero-y-fechas.md`). Así lo único que el modelo decide es **en qué
+ * campo va el número que leyó**, que es una clasificación y no una cuenta.
+ */
+export const EXTRACTION_ONLY_FIELDS = ["installmentAmount"] as const;
+export type ExtractionOnlyField = (typeof EXTRACTION_ONLY_FIELDS)[number];
+export type ExtractionField = PurchaseField | ExtractionOnlyField;
+
+/**
  * Lo que el modelo necesita saber del usuario para resolver "la del Galicia".
  *
  * Solo ids: la validación acá es de **pertenencia**, no de parecido. Un `cardId` que no
@@ -52,10 +65,17 @@ export type RejectionReason =
   | "vacio"
   | "fecha-invalida"
   | "fecha-futura"
-  | "no-pertenece-al-usuario";
+  | "no-pertenece-al-usuario"
+  /** Vino el monto de la cuota pero no cuántas: no hay con qué multiplicar. */
+  | "sin-cuotas-para-derivar"
+  /** El total de las cuotas da MENOS que el precio: una de las dos lecturas está mal. */
+  | "contradice-el-monto";
 
-export type Rejection = { field: PurchaseField; reason: RejectionReason };
-export type Repair = { field: PurchaseField; what: "normalizado" | "recortado" };
+export type Rejection = { field: ExtractionField; reason: RejectionReason };
+export type Repair = {
+  field: ExtractionField;
+  what: "normalizado" | "recortado" | "derivado";
+};
 
 /**
  * El resultado de interpretar una respuesta del modelo.

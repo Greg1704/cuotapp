@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { purchaseSchema } from "@/lib/validation/purchase";
 
 import { purchaseExtractionSchema, purchaseResponseSchema } from "./schema";
+import { EXTRACTION_ONLY_FIELDS } from "./types";
 
 describe("schema de extracción", () => {
   /**
@@ -11,11 +12,27 @@ describe("schema de extracción", () => {
    * este no lo sigue, el modelo va a devolver una clave que después se descarta en
    * silencio — el modo de falla más difícil de notar de toda la feature.
    */
-  it("todos sus campos existen en purchaseSchema", () => {
+  it("todos sus campos existen en purchaseSchema, salvo las excepciones declaradas", () => {
     const formFields = Object.keys(purchaseSchema.def.shape);
+    const allowed: readonly string[] = EXTRACTION_ONLY_FIELDS;
     for (const field of Object.keys(purchaseExtractionSchema.shape)) {
+      if (allowed.includes(field)) continue;
       expect(formFields).toContain(field);
     }
+  });
+
+  /**
+   * Las excepciones se declaran en `EXTRACTION_ONLY_FIELDS`, así que sumar un campo que no
+   * existe en el formulario es una decisión explícita y no un descuido. Hoy hay una sola:
+   * `installmentAmount`, que existe para que la multiplicación de "12 cuotas de 45 mil" la
+   * haga nuestro código y no el modelo.
+   */
+  it("las excepciones son las declaradas, y ninguna más", () => {
+    const formFields = Object.keys(purchaseSchema.def.shape);
+    const extras = Object.keys(purchaseExtractionSchema.shape).filter(
+      (field) => !formFields.includes(field)
+    );
+    expect(extras).toEqual([...EXTRACTION_ONLY_FIELDS]);
   });
 
   // Es una cotización de mercado que el usuario informa, no algo que esté en la frase. Si
