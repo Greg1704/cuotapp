@@ -110,6 +110,12 @@ Las features que dependen de esos datos se **activan solo si el usuario los carg
 
 ## 2. Entrada por lenguaje natural — un punto común para compras y suscripciones
 
+> **El diseño técnico de esta sección vive en [`IA-EXTRACCION.md`](./IA-EXTRACCION.md)**,
+> derivado de la pipeline LLM ya medida del proyecto hermano Qulmara. **Ojo antes de
+> estimar:** dos supuestos de acá abajo —costo despreciable y latencia de 1-3 s— quedaron
+> desmentidos por mediciones reales sobre el mismo modelo (razona por defecto: ~40 s y ~5×
+> el costo estimado). Se arregla con un parámetro, pero hay que medirlo primero.
+
 ### La idea
 
 En vez de completar un formulario de 10 campos, escribir lo que pasó:
