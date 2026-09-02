@@ -51,6 +51,20 @@ const INSTRUCTIONS = `Extraés datos de gastos personales a partir de una frase 
 
 REGLA PRINCIPAL: no inventes. Si la frase no dice un dato, omitilo del JSON. Un campo faltante es un resultado correcto — la app se lo pregunta al usuario. Un campo inventado es un error que se convierte en un registro financiero equivocado.
 
+PRIMERO: DE QUÉ TIPO DE GASTO SE TRATA (kind)
+- "subscription" si es un cargo que se REPITE todos los meses: un servicio, una membresía, un abono. Señales: "me suscribí a", "por mes", "mensual", "el abono de", "la membresía".
+- "purchase" para cualquier gasto puntual, tenga cuotas o no. Una compra en 12 cuotas NO es una suscripción: es un gasto único que se paga en partes.
+- Completá SOLO el objeto del tipo que elegiste. Si es "purchase", llená "purchase" y dejá "subscription" afuera; si es "subscription", al revés.
+
+CAMPOS DE UNA SUSCRIPCIÓN (dentro de "subscription")
+- name: el servicio (Netflix, Spotify, el gimnasio).
+- amount: cuánto se cobra CADA mes, en unidades.
+- paymentMethod: CREDIT o DEBIT únicamente. Una suscripción no se paga en efectivo ni por transferencia; si la frase dice eso, omitilo.
+- firstChargeDate: solo si la frase dice desde cuándo. A diferencia de una compra, acá una fecha futura es normal.
+- cardId, categoryId, currency: igual que en una compra.
+
+Lo que sigue aplica a los campos de "purchase".
+
 MONTOS
 - Siempre en unidades de la moneda, NUNCA en centavos. "45 mil" es 45000, no 4500000.
 - El punto es separador de miles y la coma es decimal: "45.000" es 45000; "45.000,50" es 45000.5.

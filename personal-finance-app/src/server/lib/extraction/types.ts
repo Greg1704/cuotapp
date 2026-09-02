@@ -1,6 +1,9 @@
 import type { PAYMENT_METHODS } from "@/lib/validation/purchase";
+import type { SUB_METHODS } from "@/lib/validation/subscription";
 
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
+/** Las suscripciones solo se pagan con tarjeta: efectivo y transferencia quedan fuera. */
+export type SubscriptionMethod = (typeof SUB_METHODS)[number];
 export type Currency = "ARS" | "USD";
 
 /**
@@ -30,6 +33,26 @@ export type PurchaseDraft = {
 export type PurchaseField = keyof PurchaseDraft;
 
 /**
+ * Los campos que la IA puede proponer para una suscripción.
+ *
+ * Subconjunto de `subscriptionSchema`, con las mismas dos ausencias que en la compra y por
+ * las mismas razones: `limitRate` es una cotización que informa el usuario, y `endDate`
+ * (la baja) casi nunca está en la frase con la que alguien da de alta un servicio —
+ * pedirla sería invitar a inventarla.
+ */
+export type SubscriptionDraft = {
+  name?: string;
+  amount?: number;
+  currency?: Currency;
+  paymentMethod?: SubscriptionMethod;
+  cardId?: string;
+  categoryId?: string;
+  firstChargeDate?: Date;
+};
+
+export type SubscriptionField = keyof SubscriptionDraft;
+
+/**
  * Campos que se le piden al modelo pero que NO son del formulario.
  *
  * Hoy solo `installmentAmount`, el monto de UNA cuota. Existe porque el retail argentino
@@ -40,7 +63,7 @@ export type PurchaseField = keyof PurchaseDraft;
  */
 export const EXTRACTION_ONLY_FIELDS = ["installmentAmount"] as const;
 export type ExtractionOnlyField = (typeof EXTRACTION_ONLY_FIELDS)[number];
-export type ExtractionField = PurchaseField | ExtractionOnlyField;
+export type ExtractionField = PurchaseField | SubscriptionField | ExtractionOnlyField;
 
 /**
  * Lo que el modelo necesita saber del usuario para resolver "la del Galicia".
@@ -69,7 +92,9 @@ export type RejectionReason =
   /** Vino el monto de la cuota pero no cuántas: no hay con qué multiplicar. */
   | "sin-cuotas-para-derivar"
   /** El total de las cuotas da MENOS que el precio: una de las dos lecturas está mal. */
-  | "contradice-el-monto";
+  | "contradice-el-monto"
+  /** Valor válido en general, pero no para este tipo de gasto (efectivo en una suscripción). */
+  | "no-admitido";
 
 export type Rejection = { field: ExtractionField; reason: RejectionReason };
 export type Repair = {
@@ -90,9 +115,21 @@ export type Repair = {
  *
  * Invariantes: `repaired ⊆ filled`, y `rejected` es disjunto de `filled`.
  */
-export type ExtractionOutcome = {
-  values: PurchaseDraft;
-  filled: PurchaseField[];
+export type ExtractionOutcome<Values = PurchaseDraft> = {
+  values: Values;
+  filled: (keyof Values)[];
   repaired: Repair[];
   rejected: Rejection[];
 };
+
+/**
+ * El resultado del punto común de entrada: qué resultó ser el gasto, y sus datos.
+ *
+ * Es una **unión discriminada**, no un objeto con todo opcional: así el código que la
+ * consume no puede leer `totalInstallments` de una suscripción sin que TypeScript lo pare.
+ * Refleja en el tipo lo que el modelo de datos ya dice — compra y suscripción son
+ * entidades hermanas, no variantes de la misma.
+ */
+export type ExpenseExtraction =
+  | { kind: "purchase"; outcome: ExtractionOutcome<PurchaseDraft> }
+  | { kind: "subscription"; outcome: ExtractionOutcome<SubscriptionDraft> };

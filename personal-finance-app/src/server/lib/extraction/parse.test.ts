@@ -350,8 +350,11 @@ describe("parsePurchaseExtraction", () => {
       const result = parse({ currency: "euros", totalInstallments: 99, cardId: "nope" });
       for (const { field } of result.rejected) {
         expect(result.filled).not.toContain(field);
-        // `installmentAmount` no es un campo del formulario: no tiene lugar en `values`.
-        if (field !== "installmentAmount") expect(result.values[field]).toBeUndefined();
+        // Solo los campos de compra tienen lugar en `values` acá: `installmentAmount` es
+        // de extracción y el resto de la unión pertenece a la suscripción.
+        if (field in result.values) {
+          expect(result.values[field as keyof typeof result.values]).toBeUndefined();
+        }
       }
     });
 

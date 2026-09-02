@@ -20,7 +20,7 @@ pensado para retomar el trabajo en otra sesión sin tener que reconstruir el con
 | 3 | El prompt | ✅ |
 | 4 | `extractPurchase()` + transporte `fixture` | ✅ |
 | 5 | Corpus y su runner (`--dry-run`) | ✅ |
-| 6 | Suscripciones y ruteo | ⏳ |
+| 6 | Suscripciones y ruteo | ✅ |
 | 7 | `aiEnabled()` + degradación | ⏳ |
 | 8 | Server Action, prefill y campos "sugerido" | ⏳ |
 | 9 | `ExtractionLog` + rate limit | ⏳ |
@@ -430,6 +430,78 @@ ningún caso que no afirme nada, ninguno que se contradiga.
 
 El segundo schema de salida. El `REBRANDING.md` promete que es *"una sola feature con tres
 salidas, no tres features"*; **este paso es donde esa promesa se verifica o se cae**.
+
+### Resultado: la promesa se sostiene, pero cobró un precio
+
+`expense.ts` con `extractExpense()`, `parseSubscriptionExtraction()`, 6 casos nuevos de
+corpus y 12 tests de ruteo (133 en la carpeta, 404 en el repo).
+
+**Una llamada, no dos.** Clasificar primero y extraer después duplicaría costo y latencia
+sin comprar nada: el modelo tiene que leer la frase entera para cualquiera de las dos
+cosas, así que las hace juntas. El `kind` viene en la misma respuesta.
+
+**El schema quedó anidado (`{ kind, purchase?, subscription? }`), no plano.** Con todos los
+campos al mismo nivel nada impide que una suscripción vuelva con `totalInstallments`:
+habría que pedir en prosa que no pase, y confiar. Anidando, **el campo directamente no
+existe del lado equivocado**. Es el mismo principio por el que el schema tiene una clave
+por campo en vez de una lista genérica — que la estructura impida el error en vez de que
+una instrucción lo desaconseje. El costo es un nivel de anidamiento en el JSON.
+
+**`extractPurchase` desapareció, y era el punto.** Al llegar acá había dos caminos:
+mantener las dos funciones, o que `extractExpense` fuera la única puerta. Mantener las dos
+significaba **dos prompts y dos schemas que sincronizar** — exactamente las "tres features"
+que el rebranding descarta. Se borró `purchase.ts`, y `purchaseResponseSchema` con él: un
+segundo schema derivado, aunque salga de la misma fuente, es otro artefacto que puede
+quedar desalineado.
+
+**El resultado es una unión discriminada, no un objeto con todo opcional.** El código que
+la consume no puede leer `totalInstallments` de una suscripción sin que TypeScript lo pare
+— cosa que los tests tuvieron que respetar y que quedó documentada ahí. Refleja en el tipo
+lo que el modelo de datos ya decía: compra y suscripción son entidades hermanas, no
+variantes de la misma.
+
+**Un `kind` inválido es un error transitorio, no un default.** Prellenar el formulario
+equivocado es peor que no prellenar nada: el usuario tiene que darse cuenta y volver atrás.
+
+**Una diferencia propia de la suscripción, que salió al escribirla:** un primer cobro
+**futuro es válido** (se da de alta algo que empieza el mes que viene), mientras que una
+compra con fecha futura se rechaza porque ya ocurrió. Y un `CASH` en una suscripción no es
+un valor desconocido —es válido en una compra— sino uno que **no aplica a este tipo**, así
+que tiene su propio motivo de rechazo: si se repite, el prompt no está separando bien los
+dos casos.
+
+**Lo que costó en tokens:** el prefijo pasó de ~692 a ~951 tokens (+37%) por la sección de
+clasificación y los campos de suscripción. Sigue siendo chico y sigue cacheando (una sola
+huella en los 29 casos).
+
+**La fixture existente rompió, y estuvo bien.** Cambió la forma de la respuesta, así que la
+respuesta guardada dejó de ser válida — que es el comportamiento correcto de un snapshot.
+Cuando lleguen las fixtures reales del corpus ya nacerán con la forma nueva.
+
+---
+
+## Bloque A terminado
+
+Los seis pasos cierran con `npm run typecheck && npm test && npm run lint` en verde: **404
+tests, 0 errores de lint** (los 9 warnings son deuda preexistente anotada en
+`REBRANDING.md`).
+
+Lo que ya se puede hacer sin gastar un centavo:
+
+```bash
+npm run corpus -- --dry-run     # el prompt real armado, con su huella
+npm test                        # la cadena entera contra respuestas guardadas
+```
+
+**Lo primero cuando haya API key**, y en este orden:
+
+1. `npm run corpus -- --save-fixtures` para tener respuestas reales.
+2. El **experimento del razonamiento**, solo y antes que nada
+   (`LLM_EXTRA_BODY={"thinking":{"type":"disabled"}}` contra el default): tokens, latencia
+   **y** tasa de fallos del validador. Es configuración, no código.
+3. `npm run corpus -- --repeat 3` para la **barra de ruido**, antes de creerle a cualquier
+   mejora del prompt.
+4. Recién ahí, calibrar — una variable por vez.
 
 ---
 

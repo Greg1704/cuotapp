@@ -26,8 +26,7 @@ import {
   type CorpusCase,
 } from "../src/server/lib/extraction/corpus";
 import { buildInstructions, buildPrompt } from "../src/server/lib/extraction/prompt";
-import { extractPurchase, requestKey } from "../src/server/lib/extraction/purchase";
-import type { PurchaseDraft, PurchaseField } from "../src/server/lib/extraction/types";
+import { extractExpense, requestKey } from "../src/server/lib/extraction/expense";
 import type { LLMResponse } from "../src/server/lib/llm";
 
 const FIXTURES_DIR = join(
@@ -37,8 +36,14 @@ const FIXTURES_DIR = join(
 );
 
 type CellResult = "ok" | "fail" | "skip";
+/**
+ * Los campos se miran como texto porque la tabla mezcla los dos tipos de gasto. El tipado
+ * fuerte vive donde importa —al DECLARAR un caso, donde la unión discriminada impide
+ * escribir `totalInstallments` en una suscripción— y no acá, que solo imprime.
+ */
+type Field = string;
 /** Una corrida de un caso. `error` distingue "falló la llamada" de "falló el campo". */
-type CaseRun = { cells: Map<PurchaseField, CellResult>; error?: string; response?: LLMResponse };
+type CaseRun = { cells: Map<Field, CellResult>; error?: string; response?: LLMResponse };
 
 function parseArgs(argv: string[]) {
   const has = (flag: string) => argv.includes(flag);
@@ -63,26 +68,29 @@ function contextFor(testCase: CorpusCase) {
  * medido" y "medido y correcto" son afirmaciones distintas, y mezclarlas inventaría
  * aciertos que nadie verificó.
  */
-function assertedFields(testCase: CorpusCase): PurchaseField[] {
+function assertedFields(testCase: CorpusCase): Field[] {
   return [
+    // El tipo de gasto es la primera afirmación de todas: prellenar el formulario
+    // equivocado es peor que no prellenar nada.
+    "kind",
     ...Object.keys(testCase.expected ?? {}),
     ...(testCase.present ?? []),
     ...(testCase.absent ?? []),
-  ] as PurchaseField[];
+  ];
 }
 
 function checkField(
   testCase: CorpusCase,
-  field: PurchaseField,
-  values: PurchaseDraft
+  field: Field,
+  kind: string,
+  values: Record<string, unknown>
 ): CellResult {
-  if (testCase.absent?.includes(field)) {
-    return values[field] === undefined ? "ok" : "fail";
-  }
-  if (testCase.present?.includes(field)) {
-    return values[field] !== undefined ? "ok" : "fail";
-  }
-  const expected = testCase.expected?.[field];
+  if (field === "kind") return kind === testCase.kind ? "ok" : "fail";
+  const absent: string[] = testCase.absent ?? [];
+  const present: string[] = testCase.present ?? [];
+  if (absent.includes(field)) return values[field] === undefined ? "ok" : "fail";
+  if (present.includes(field)) return values[field] !== undefined ? "ok" : "fail";
+  const expected = (testCase.expected as Record<string, unknown> | undefined)?.[field];
   if (expected === undefined) return "skip";
   const actual = values[field];
   if (expected instanceof Date) {
@@ -92,11 +100,15 @@ function checkField(
 }
 
 async function runCase(testCase: CorpusCase, saveFixtures: boolean): Promise<CaseRun> {
-  const cells = new Map<PurchaseField, CellResult>();
+  const cells = new Map<Field, CellResult>();
   try {
-    const { outcome, response } = await extractPurchase(testCase.text, contextFor(testCase));
+    const { kind, outcome, response } = await extractExpense(
+      testCase.text,
+      contextFor(testCase)
+    );
+    const values = outcome.values as Record<string, unknown>;
     for (const field of assertedFields(testCase)) {
-      cells.set(field, checkField(testCase, field, outcome.values));
+      cells.set(field, checkField(testCase, field, kind, values));
     }
     if (saveFixtures) {
       mkdirSync(FIXTURES_DIR, { recursive: true });
@@ -125,7 +137,7 @@ function printResults(cases: CorpusCase[], runs: Map<string, CaseRun[]>, repeat:
   console.log(`\n${"caso".padEnd(labelWidth)}  ${head}`);
   console.log("-".repeat(labelWidth + 2 + head.length));
 
-  const totals = new Map<PurchaseField, { ok: number; total: number }>();
+  const totals = new Map<Field, { ok: number; total: number }>();
   let unstable = 0;
 
   for (const testCase of cases) {

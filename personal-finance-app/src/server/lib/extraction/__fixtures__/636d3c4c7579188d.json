@@ -1,11 +1,14 @@
 {
   "model": "fixture-manual",
   "data": {
-    "paymentMethod": "CREDIT",
-    "cardId": "card_galicia",
-    "description": "heladera",
-    "installmentAmount": 45000,
-    "totalInstallments": 12,
-    "currency": "ARS"
+    "kind": "purchase",
+    "purchase": {
+      "paymentMethod": "CREDIT",
+      "cardId": "card_galicia",
+      "description": "heladera",
+      "installmentAmount": 45000,
+      "totalInstallments": 12,
+      "currency": "ARS"
+    }
   }
 }

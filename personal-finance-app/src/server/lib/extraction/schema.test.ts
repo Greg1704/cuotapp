@@ -2,8 +2,15 @@ import { describe, expect, it } from "vitest";
 
 import { purchaseSchema } from "@/lib/validation/purchase";
 
-import { purchaseExtractionSchema, purchaseResponseSchema } from "./schema";
+import { expenseResponseSchema, purchaseExtractionSchema } from "./schema";
 import { EXTRACTION_ONLY_FIELDS } from "./types";
+
+type PropertyNode = {
+  type?: string;
+  description?: string;
+  enum?: string[];
+  properties?: Record<string, PropertyNode>;
+};
 
 describe("schema de extracción", () => {
   /**
@@ -49,10 +56,13 @@ describe("schema de extracción", () => {
   });
 
   describe("JSON Schema derivado", () => {
+    const purchaseProperties = () => {
+      const root = expenseResponseSchema().properties as Record<string, PropertyNode>;
+      return root.purchase.properties as Record<string, PropertyNode>;
+    };
+
     it("se deriva del schema Zod, con un tipo por campo", () => {
-      const schema = purchaseResponseSchema();
-      expect(schema.type).toBe("object");
-      const properties = schema.properties as Record<string, { type: string }>;
+      const properties = purchaseProperties();
       expect(Object.keys(properties).sort()).toEqual(
         Object.keys(purchaseExtractionSchema.shape).sort()
       );
@@ -60,17 +70,33 @@ describe("schema de extracción", () => {
       expect(properties.purchaseDate.type).toBe("string");
     });
 
+    /**
+     * La razón de que el schema esté anidado: con todos los campos al mismo nivel, nada
+     * impide que una suscripción vuelva con `totalInstallments`. Anidando, el campo
+     * directamente no existe del lado equivocado — la estructura impide el error en vez de
+     * que una instrucción lo desaconseje.
+     */
+    it("una suscripción no tiene dónde poner los campos de una compra", () => {
+      const root = expenseResponseSchema().properties as Record<string, PropertyNode>;
+      const subscription = root.subscription.properties as Record<string, PropertyNode>;
+      for (const field of ["totalInstallments", "installmentAmount", "financedTotal"]) {
+        expect(subscription).not.toHaveProperty(field);
+      }
+    });
+
+    it("el tipo de gasto es un enum cerrado, no texto libre", () => {
+      const root = expenseResponseSchema().properties as Record<string, PropertyNode>;
+      expect(root.kind.enum).toEqual(["purchase", "subscription"]);
+    });
+
     // Todo lo que viaja en el prompt se paga en tokens, y esta clave es metadata para
     // validadores que el modelo no usa.
     it("no lleva $schema", () => {
-      expect(purchaseResponseSchema()).not.toHaveProperty("$schema");
+      expect(expenseResponseSchema()).not.toHaveProperty("$schema");
     });
 
     it("las descripciones viajan: son la documentación que lee el modelo", () => {
-      const properties = purchaseResponseSchema().properties as Record<
-        string,
-        { description?: string }
-      >;
+      const properties = purchaseProperties();
       expect(properties.totalAmount.description).toMatch(/no centavos/i);
       expect(properties.purchaseDate.description).toMatch(/YYYY-MM-DD/);
     });

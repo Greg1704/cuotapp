@@ -4,8 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { CORPUS, CORPUS_CONTEXT, type CorpusCase } from "./corpus";
-import { extractPurchase, requestKey } from "./purchase";
-import type { PurchaseDraft, PurchaseField } from "./types";
+import { extractExpense, requestKey } from "./expense";
 
 const FIXTURES_DIR = join(import.meta.dirname, "__fixtures__");
 
@@ -40,19 +39,25 @@ describe("corpus contra fixtures", () => {
 
   for (const testCase of withFixture) {
     it(`${testCase.label}: ${testCase.text}`, async () => {
-      const { outcome } = await extractPurchase(testCase.text, {
+      const { kind, outcome } = await extractExpense(testCase.text, {
         ...CORPUS_CONTEXT,
         ...testCase.context,
       });
 
+      // El ruteo primero: prellenar el formulario equivocado es peor que no prellenar.
+      expect(kind, "tipo de gasto").toBe(testCase.kind);
+
+      // Los valores ya están validados por tipo dentro de su rama; acá se los mira como
+      // un diccionario porque la afirmación es la misma para los dos tipos.
+      const values = outcome.values as Record<string, unknown>;
       for (const [field, expected] of Object.entries(testCase.expected ?? {})) {
-        expect(outcome.values[field as PurchaseField], `campo ${field}`).toEqual(expected);
+        expect(values[field], `campo ${field}`).toEqual(expected);
       }
       for (const field of testCase.present ?? []) {
-        expect(outcome.values[field], `campo ${field} debería venir`).toBeDefined();
+        expect(values[field], `campo ${field} debería venir`).toBeDefined();
       }
       for (const field of testCase.absent ?? []) {
-        expect(outcome.values[field], `campo ${field} NO debería venir`).toBeUndefined();
+        expect(values[field], `campo ${field} NO debería venir`).toBeUndefined();
       }
     });
   }
@@ -76,14 +81,22 @@ describe("integridad del corpus", () => {
 
   it("ningún caso se contradice a sí mismo", () => {
     for (const testCase of CORPUS) {
-      const expected = Object.keys(testCase.expected ?? {}) as PurchaseField[];
+      const expected: string[] = Object.keys(testCase.expected ?? {});
+      const present: string[] = testCase.present ?? [];
       for (const field of testCase.absent ?? []) {
         expect(expected, `"${testCase.label}" pide ${field} ausente y presente`).not.toContain(
           field
         );
-        expect(testCase.present ?? []).not.toContain(field);
+        expect(present).not.toContain(field);
       }
     }
+  });
+
+  // La promesa del rebranding es "una sola feature con tres salidas". Un corpus con un
+  // solo tipo de gasto no podría detectar que el ruteo esté roto.
+  it("cubre los dos tipos de gasto", () => {
+    expect(CORPUS.some((c) => c.kind === "purchase")).toBe(true);
+    expect(CORPUS.filter((c) => c.kind === "subscription").length).toBeGreaterThanOrEqual(4);
   });
 
   // El caso "vago" es el que atrapa las alucinaciones: si el corpus solo verificara lo que
@@ -95,14 +108,21 @@ describe("integridad del corpus", () => {
 
   it("los montos esperados están en unidades, nunca en centavos", () => {
     for (const testCase of CORPUS) {
-      const amount = testCase.expected?.totalAmount;
-      if (amount !== undefined) expect(amount).toBeLessThan(100_000_000);
+      const expected = (testCase.expected ?? {}) as Record<string, unknown>;
+      for (const key of ["totalAmount", "financedTotal", "amount"]) {
+        const amount = expected[key];
+        if (typeof amount === "number") expect(amount).toBeLessThan(100_000_000);
+      }
     }
   });
 
-  it("las fechas esperadas no son futuras respecto del hoy congelado", () => {
+  // Una COMPRA ya ocurrió, así que su fecha no puede ser futura. Un primer cobro de
+  // suscripción sí puede serlo (se da de alta algo que empieza el mes que viene), por eso
+  // esta afirmación es solo sobre las compras.
+  it("las fechas de compra esperadas no son futuras respecto del hoy congelado", () => {
     for (const testCase of CORPUS) {
-      const date = (testCase.expected as PurchaseDraft | undefined)?.purchaseDate;
+      if (testCase.kind !== "purchase") continue;
+      const date = testCase.expected?.purchaseDate;
       if (date) expect(date.getTime()).toBeLessThanOrEqual(CORPUS_CONTEXT.today.getTime());
     }
   });

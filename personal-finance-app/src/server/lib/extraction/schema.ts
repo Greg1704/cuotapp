@@ -66,14 +66,67 @@ export const purchaseExtractionSchema = z.object({
 
 export type PurchaseExtraction = z.infer<typeof purchaseExtractionSchema>;
 
+/** Los campos de una suscripción. Ver `SubscriptionDraft` para qué queda afuera y por qué. */
+export const subscriptionExtractionSchema = z.object({
+  name: z.string().describe("Nombre del servicio (Netflix, Spotify, el gimnasio).").optional(),
+  amount: z.number().describe("Monto de CADA cobro mensual, en unidades.").optional(),
+  currency: z.string().describe("Moneda: ARS o USD.").optional(),
+  paymentMethod: z
+    .string()
+    .describe("CREDIT o DEBIT. Una suscripción no se paga en efectivo ni por transferencia.")
+    .optional(),
+  cardId: z.string().describe("El id EXACTO de una de las tarjetas listadas.").optional(),
+  categoryId: z.string().describe("El id EXACTO de una de las categorías listadas.").optional(),
+  firstChargeDate: z
+    .string()
+    .describe("Fecha del primer cobro, YYYY-MM-DD. Omitir si la frase no la dice.")
+    .optional(),
+});
+
+/**
+ * El schema del punto común de entrada: una clasificación más los datos del tipo elegido.
+ *
+ * **Una sola llamada, no dos.** Clasificar y extraer en llamadas separadas duplicaría
+ * costo y latencia para conseguir lo mismo: el modelo ya tiene que leer la frase entera
+ * para cualquiera de las dos cosas.
+ *
+ * **Y anidado, no plano.** Con todos los campos al mismo nivel, nada impide que una
+ * suscripción vuelva con `totalInstallments`, o una compra con `name` — habría que pedir
+ * en prosa que no pase, y confiar. Anidando, el campo directamente **no existe** del lado
+ * equivocado. Es el mismo principio por el que el schema tiene una clave por campo en vez
+ * de una lista genérica: que la estructura impida el error en vez de que una instrucción
+ * lo desaconseje.
+ */
+export const expenseExtractionSchema = z.object({
+  kind: z
+    .enum(["purchase", "subscription"])
+    .describe(
+      "'subscription' si es un cargo que se repite todos los meses; " +
+        "'purchase' para cualquier gasto puntual, en cuotas o no."
+    ),
+  purchase: purchaseExtractionSchema.optional(),
+  subscription: subscriptionExtractionSchema.optional(),
+});
+
 /**
  * El JSON Schema que viaja en el prompt. Derivado, nunca escrito a mano.
  *
  * Se le saca `$schema`: es metadata para validadores, el modelo no la usa, y todo lo que
  * viaja en el prompt se paga en tokens.
  */
-export function purchaseResponseSchema(): Record<string, unknown> {
-  const schema = z.toJSONSchema(purchaseExtractionSchema) as Record<string, unknown>;
-  delete schema.$schema;
-  return schema;
+/**
+ * El JSON Schema que viaja en el prompt. Derivado, nunca escrito a mano.
+ *
+ * Hay UNO solo, el del punto común de entrada, porque hay una sola llamada. Un
+ * `purchaseResponseSchema` aparte sería un segundo schema que mantener sincronizado con
+ * este, que es exactamente el problema que la derivación viene a evitar.
+ */
+export function expenseResponseSchema(): Record<string, unknown> {
+  return toPromptSchema(expenseExtractionSchema);
+}
+
+function toPromptSchema(schema: z.ZodType): Record<string, unknown> {
+  const json = z.toJSONSchema(schema) as Record<string, unknown>;
+  delete json.$schema;
+  return json;
 }

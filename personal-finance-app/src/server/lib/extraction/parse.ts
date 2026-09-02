@@ -8,9 +8,12 @@ import type {
   PaymentMethod,
   PurchaseDraft,
   PurchaseField,
+  SubscriptionField,
   Rejection,
   RejectionReason,
   Repair,
+  SubscriptionDraft,
+  SubscriptionMethod,
 } from "./types";
 
 /**
@@ -345,3 +348,104 @@ function numberReason(value: unknown): RejectionReason {
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
+
+
+/**
+ * Lo mismo que `parsePurchaseExtraction`, para el otro tipo de gasto.
+ *
+ * Reusa las mismas reglas —vocabulario que se normaliza, referencias que se verifican por
+ * pertenencia, fechas que no pueden ser futuras— porque son las mismas reglas: cambia qué
+ * campos hay, no cuánto se le cree al modelo.
+ *
+ * Una diferencia propia: **una suscripción no se paga en efectivo ni por transferencia**
+ * (`SUB_METHODS`). Un `CASH` que llegue acá no es un valor desconocido —es válido en una
+ * compra— sino uno que no aplica a este tipo, y se registra como tal: si se repite, el
+ * prompt no está separando bien los dos casos.
+ */
+export function parseSubscriptionExtraction(
+  data: unknown,
+  context: ExtractionContext
+): ExtractionOutcome<SubscriptionDraft> {
+  const raw = isRecord(data) ? data : {};
+  const values: SubscriptionDraft = {};
+  const filled: SubscriptionField[] = [];
+  const repaired: Repair[] = [];
+  const rejected: Rejection[] = [];
+
+  function accept<K extends SubscriptionField>(field: K, value: SubscriptionDraft[K]) {
+    values[field] = value;
+    filled.push(field);
+  }
+  const repair = (field: ExtractionField, what: Repair["what"]) =>
+    repaired.push({ field, what });
+  const reject = (field: ExtractionField, reason: RejectionReason) =>
+    rejected.push({ field, reason });
+
+  read(raw, "name", (value) => {
+    const text = asText(value);
+    if (text === null) return reject("name", "tipo-invalido");
+    if (!text) return reject("name", "vacio");
+    if (text.length > MAX_NAME) {
+      repair("name", "recortado");
+      return accept("name", text.slice(0, MAX_NAME).trimEnd());
+    }
+    accept("name", text);
+  });
+
+  read(raw, "amount", (value) => {
+    const amount = asPositiveNumber(value);
+    if (amount === null) return reject("amount", numberReason(value));
+    accept("amount", amount);
+  });
+
+  read(raw, "currency", (value) => {
+    const text = asText(value);
+    if (text === null) return reject("currency", "tipo-invalido");
+    const currency = normalizeCurrency(text);
+    if (!currency) return reject("currency", "valor-desconocido");
+    if (currency !== text) repair("currency", "normalizado");
+    accept("currency", currency);
+  });
+
+  read(raw, "paymentMethod", (value) => {
+    const text = asText(value);
+    if (text === null) return reject("paymentMethod", "tipo-invalido");
+    const method = normalizePaymentMethod(text);
+    if (!method) return reject("paymentMethod", "valor-desconocido");
+    if (method !== "CREDIT" && method !== "DEBIT") {
+      return reject("paymentMethod", "no-admitido");
+    }
+    if (method !== text) repair("paymentMethod", "normalizado");
+    accept("paymentMethod", method as SubscriptionMethod);
+  });
+
+  read(raw, "cardId", (value) => {
+    const id = asText(value);
+    if (id === null) return reject("cardId", "tipo-invalido");
+    if (!context.cardIds.includes(id)) return reject("cardId", "no-pertenece-al-usuario");
+    accept("cardId", id);
+  });
+
+  read(raw, "categoryId", (value) => {
+    const id = asText(value);
+    if (id === null) return reject("categoryId", "tipo-invalido");
+    if (!context.categoryIds.includes(id)) {
+      return reject("categoryId", "no-pertenece-al-usuario");
+    }
+    accept("categoryId", id);
+  });
+
+  read(raw, "firstChargeDate", (value) => {
+    const text = asText(value);
+    if (text === null) return reject("firstChargeDate", "tipo-invalido");
+    const date = parseIsoDate(text);
+    if (!date) return reject("firstChargeDate", "fecha-invalida");
+    // A diferencia de una compra, un primer cobro futuro es perfectamente normal: se
+    // puede dar de alta algo que empieza a cobrarse el mes que viene.
+    accept("firstChargeDate", date);
+  });
+
+  return { values, filled, repaired, rejected };
+}
+
+const MAX_NAME = 100;
