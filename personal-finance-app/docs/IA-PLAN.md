@@ -18,7 +18,7 @@ pensado para retomar el trabajo en otra sesión sin tener que reconstruir el con
 | 1 | Transporte — `src/server/lib/llm/` | ✅ |
 | 2 | Schema de extracción y reparaciones | ✅ |
 | 3 | El prompt | ✅ |
-| 4 | `extractPurchase()` + transporte `fixture` | ⏳ |
+| 4 | `extractPurchase()` + transporte `fixture` | ✅ |
 | 5 | Corpus y su runner (`--dry-run`) | ⏳ |
 | 6 | Suscripciones y ruteo | ⏳ |
 | 7 | `aiEnabled()` + degradación | ⏳ |
@@ -317,6 +317,31 @@ Es la mecánica del transporte `exchange` de Qulmara con otro propósito. El pro
 allá —correr el mismo prompt contra otro modelo para separar *"la guía está mal escrita"*
 de *"el modelo no da la talla"*— **no aplica acá**: si la extracción falla contra un
 resultado esperado, falla y punto.
+
+### Resultado
+
+`purchase.ts` + `llm/fixture.ts`, más 37 tests (113 en la carpeta).
+
+**El emparejamiento pedido↔respuesta no se pudo copiar, y el motivo es nuestro.** Qulmara
+deriva la clave hasheando instrucciones+prompt. Acá eso **no funciona**: el prompt lleva un
+nonce aleatorio por llamada (paso 3), así que la clave cambiaría siempre y ninguna fixture
+se encontraría jamás. La clave la provee el dominio (`requestKey`, un hash del texto del
+usuario) y viaja como campo opcional del pedido; el transporte real la ignora. Es más
+honesto además: **la misma frase es el mismo caso**, que es lo que un corpus quiere decir.
+
+**Un solo contexto, no dos.** `extractPurchase` recibe las tarjetas y categorías una vez y
+deriva de ahí la lista de ids que necesita el validador. Con dos listas separadas podrían
+no coincidir —el modelo viendo una tarjeta que el validador después descarta— y el síntoma
+sería un `cardId` que se pierde sin explicación. Hay tests de las dos direcciones.
+
+**El transporte es un parámetro con default.** Los tests le pasan uno de mentira sin tocar
+variables de entorno ni disco; producción no le pasa nada y usa `generateStructured`, que a
+su vez elige entre proveedor real y fixtures. Los dos mecanismos conviven sin pisarse.
+
+**`MAX_TEXT_LENGTH` (1000).** La frase es la única parte del prompt que nunca cachea, así
+que cada carácter se paga entero en cada llamada. Se rechaza **antes** de gastar la
+llamada, y como error permanente: reintentar el mismo texto falla idéntico, así que la UI
+tiene que pedir que lo acorte, no ofrecer "reintentar".
 
 ---
 

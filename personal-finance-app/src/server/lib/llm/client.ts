@@ -1,4 +1,5 @@
-import { readConfig, type LLMConfig } from "./config";
+import { readConfig, readProvider, type LLMConfig } from "./config";
+import { generateViaFixture } from "./fixture";
 import { LLMPermanentError, LLMTransientError } from "./errors";
 import type { GenerateStructuredInput, LLMResponse } from "./types";
 
@@ -20,6 +21,10 @@ import type { GenerateStructuredInput, LLMResponse } from "./types";
 export async function generateStructured(
   input: GenerateStructuredInput
 ): Promise<LLMResponse> {
+  // Todos los transportes reciben lo mismo y devuelven lo mismo: quien llama nunca se
+  // entera de cuál corrió. Es lo único que hace que una corrida con fixtures signifique
+  // algo sobre la corrida real.
+  if (readProvider() === "fixture") return generateViaFixture(input);
   return callProvider(readConfig(), input);
 }
 

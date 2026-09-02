@@ -36,6 +36,24 @@ export function isConfigured(): boolean {
   return Boolean(process.env.LLM_API_KEY && process.env.LLM_MODEL);
 }
 
+/**
+ * Qué transporte corre. `api` es lo único que se despliega; `fixture` lee respuestas de
+ * disco para que los tests y el corpus corran la cadena entera sin red ni API key.
+ */
+export type LLMProvider = "api" | "fixture";
+
+export function readProvider(): LLMProvider {
+  return process.env.LLM_PROVIDER === "fixture" ? "fixture" : "api";
+}
+
+export function readFixturesDir(): string {
+  const dir = process.env.LLM_FIXTURES_DIR;
+  if (!dir) {
+    throw new LLMPermanentError("LLM_PROVIDER=fixture necesita LLM_FIXTURES_DIR.");
+  }
+  return dir;
+}
+
 export function readConfig(): LLMConfig {
   const apiKey = process.env.LLM_API_KEY;
   const model = process.env.LLM_MODEL;

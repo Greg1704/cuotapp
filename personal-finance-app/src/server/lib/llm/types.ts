@@ -36,6 +36,16 @@ export type GenerateStructuredInput = {
   prompt: string;
   /** JSON Schema de la respuesta esperada. Se inyecta en el prompt (ver `client.ts`). */
   schema: Record<string, unknown>;
+  /**
+   * Identificador estable de "este pedido lógico", que lo provee el dominio.
+   *
+   * Lo usa el transporte de fixtures para emparejar un pedido con su respuesta guardada;
+   * el transporte real lo ignora. **Se pasa en vez de derivarse del prompt** —que es lo
+   * que hace el proyecto hermano, hasheando instrucciones+prompt— porque nuestro prompt
+   * lleva un nonce aleatorio por llamada: hashearlo daría una clave distinta cada vez y
+   * ninguna respuesta guardada se encontraría jamás.
+   */
+  requestKey?: string;
 };
 
 /** Firma común a todos los transportes. Quien llama nunca sabe cuál corrió. */
