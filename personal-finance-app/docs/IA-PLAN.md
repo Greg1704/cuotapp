@@ -16,7 +16,7 @@ pensado para retomar el trabajo en otra sesión sin tener que reconstruir el con
 |---|---|---|
 | — | Plan y diseño | ✅ |
 | 1 | Transporte — `src/server/lib/llm/` | ✅ |
-| 2 | Schema de extracción y reparaciones | ⏳ |
+| 2 | Schema de extracción y reparaciones | ✅ |
 | 3 | El prompt | ⏳ |
 | 4 | `extractPurchase()` + transporte `fixture` | ⏳ |
 | 5 | Corpus y su runner (`--dry-run`) | ⏳ |
@@ -178,6 +178,38 @@ De Qulmara, y es la línea que ordena todo el paso:
 La regla es la misma; **la tabla es más restrictiva acá**, porque son datos de plata y
 porque el `REBRANDING.md` ya fijó el criterio (*"campo vacío y marcado, no adivinado"*).
 La tabla completa está en `IA-EXTRACCION.md` §7 — **cada fila es un test**.
+
+### Resultado
+
+`src/server/lib/extraction/` → `types.ts`, `schema.ts`, `parse.ts`, más 65 tests.
+
+Cuatro cosas que se decidieron al bajarlo a código, y ninguna estaba en el plan:
+
+- **Se parsea campo por campo, no con `schema.parse()`.** Un `.parse()` es todo o nada:
+  un `totalAmount: "45000"` tiraría el objeto entero y perdería los ocho campos buenos,
+  habiendo pagado la llamada. Y un `.catch()` por campo repararía **en silencio**, que es
+  justo lo que no queremos: contar las desviaciones es lo que después dice qué campo está
+  mal explicado en el prompt. El schema Zod igual se declara, porque de ahí sale el JSON
+  Schema del prompt vía `z.toJSONSchema()`.
+- **El resultado son cuatro cosas, no una:** `values` (para el form), `filled` (para
+  marcar "sugerido" en la UI), y `repaired` + `rejected`, que **no son para la UI sino
+  diagnóstico del prompt**. `repaired ⊆ filled`; `rejected` es disjunto.
+- **Nada de reglas cruzadas, y quedó explícito con dos tests.** Si el modelo dice
+  "efectivo, 3 cuotas", los dos valores pasan: no se puede saber cuál de los dos está mal,
+  y `purchaseSchema` ya muestra ese error en el formulario, donde el usuario —que sí sabe
+  cuál quiso decir— lo corrige. Adivinar acá sería peor que no hacer nada.
+- **`limitRate` no se le pide al modelo, y hay un test que lo custodia.** Es una cotización
+  de mercado que el usuario informa, no algo que esté en la frase; si el modelo la
+  inventara, la utilización del límite quedaría mal **para siempre**, porque se guarda como
+  snapshot inmutable.
+
+### Corrección a `IA-EXTRACCION.md` §7
+
+La tabla de reparaciones tenía una fila **imposible de implementar**: *"`totalAmount` en
+centavos ⇒ vacío + marcado"*. No hay forma de distinguir `4500000` centavos de un monto
+grande legítimo — un millón de pesos es un monto normal para una compra en cuotas. Esa fila
+no es una validación, es una **instrucción del prompt** (paso 3), y ahí se movió. Lo que sí
+queda del lado del validador es todo lo demás de la tabla.
 
 ---
 
