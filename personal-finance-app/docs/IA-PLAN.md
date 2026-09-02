@@ -7,6 +7,9 @@ pensado para retomar el trabajo en otra sesión sin tener que reconstruir el con
 - **El diseño y su justificación** están en [`IA-EXTRACCION.md`](./IA-EXTRACCION.md)
   (derivado de la pipeline ya medida del proyecto hermano Qulmara).
 - **El alcance del producto** está en [`REBRANDING.md`](./REBRANDING.md) §2, §5 y §7.
+- **Lo que se observe corriendo contra el proveedor real** va a
+  [`IA-HALLAZGOS.md`](./IA-HALLAZGOS.md), siempre y en el mismo turno en que aparezca.
+  Este archivo guarda decisiones; aquel guarda observaciones fechadas.
 
 ---
 
